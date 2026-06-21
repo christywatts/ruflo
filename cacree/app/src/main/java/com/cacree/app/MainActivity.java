@@ -17,6 +17,7 @@ import android.view.WindowManager;
 import android.webkit.*;
 import android.widget.EditText;
 import android.widget.Toast;
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -172,6 +173,19 @@ public class MainActivity extends AppCompatActivity {
 
         // Request SMS permission after UI settles
         wv.postDelayed(this::requestPerms, 3000);
+
+        // Handle back press with predictive-back API (Android 13+) and WebView history
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (wv != null && wv.canGoBack()) {
+                    wv.goBack();
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
     }
 
     /** Injects actual status bar height so the glass top bar clears the system bar */
@@ -234,12 +248,6 @@ public class MainActivity extends AppCompatActivity {
             wv.evaluateJavascript(
                 ok ? "if(window.onSmsGranted)window.onSmsGranted();"
                    : "if(window.onSmsDenied)window.onSmsDenied();", null));
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (wv != null && wv.canGoBack()) wv.goBack();
-        else super.onBackPressed();
     }
 
     @Override
