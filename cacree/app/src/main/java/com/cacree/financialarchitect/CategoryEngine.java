@@ -1,4 +1,4 @@
-package com.cacree.app;
+package com.cacree.financialarchitect;
 
 public class CategoryEngine {
 

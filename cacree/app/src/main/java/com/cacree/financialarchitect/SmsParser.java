@@ -1,4 +1,4 @@
-package com.cacree.app;
+package com.cacree.financialarchitect;
 
 import java.security.MessageDigest;
 import java.util.regex.*;

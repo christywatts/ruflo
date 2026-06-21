@@ -1,4 +1,4 @@
-package com.cacree.app;
+package com.cacree.financialarchitect;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
