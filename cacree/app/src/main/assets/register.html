@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Cacree</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --green:#22C55E;--g2:#16A34A;--red:#DC2626;--amber:#D97706;
+  --bg:#0A0A0A;--card:#141414;--card2:#1C1C1C;
+  --tx:#F9FAFB;--mu:#9CA3AF;--border:#2A2A2A;
+  --f:'Manrope',system-ui,sans-serif
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--f);color:var(--tx)}
+body{display:flex;flex-direction:column;height:100dvh}
+
+/* SCREEN SYSTEM — simple, no transitions, WebView safe */
+.scr{display:none;flex-direction:column;height:100dvh;height:100vh;overflow:hidden}
+.scr.on{display:flex}
+
+/* SHARED LAYOUT */
+.s-top{padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:14px;flex-shrink:0}
+.back{width:38px;height:38px;border-radius:50%;background:var(--card2);border:none;color:var(--mu);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.prog-bar{flex:1;height:3px;background:var(--border);border-radius:99px;overflow:hidden}
+.prog-fill{height:100%;background:var(--green);border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.step-ct{font-size:11px;font-weight:800;color:var(--mu);letter-spacing:.06em;white-space:nowrap}
+.s-body{flex:1;overflow-y:auto;padding:20px 20px 0;-webkit-overflow-scrolling:touch}
+.s-foot{padding:16px 20px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));flex-shrink:0}
+
+/* TYPOGRAPHY */
+.big-q{font-size:26px;font-weight:900;letter-spacing:-.8px;line-height:1.2;margin-bottom:8px;color:var(--tx)}
+.hint{font-size:13px;color:var(--mu);margin-bottom:24px;font-weight:500;line-height:1.65}
+
+/* OPTION CARDS */
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{display:flex;align-items:center;gap:14px;padding:16px;background:var(--card);border-radius:14px;border:1.5px solid var(--border);cursor:pointer;transition:.15s;width:100%;text-align:left;-webkit-appearance:none}
+.opt:active{background:var(--card2)}
+.opt.on{border-color:var(--green);background:rgba(34,197,94,.08)}
+.opt-left{flex:1;min-width:0}
+.opt-title{font-size:14px;font-weight:800;color:var(--tx)}
+.opt-sub{font-size:11px;color:var(--mu);margin-top:3px;font-weight:500}
+.opt-check{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;transition:.15s;color:transparent}
+.opt.on .opt-check{background:var(--green);border-color:var(--green);color:#fff}
+.opt-tag{font-size:12px;width:32px;text-align:center;flex-shrink:0}
+
+/* MULTI SELECT */
+.multi-lbl{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:14px}
+
+/* PRIMARY BUTTON */
+.g-btn{width:100%;padding:15px;border-radius:14px;background:#fff;border:none;color:#1f2937;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--f);display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.g-btn:active{background:#f3f4f6}
+.fb-btn{width:100%;padding:15px;border-radius:14px;background:#1877F2;border:none;color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--f);display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px}
+.fb-btn:active{background:#166FE5}
+.pri{width:100%;padding:17px;border-radius:14px;background:var(--green);border:none;color:#000;font-size:15px;font-weight:900;cursor:pointer;font-family:var(--f);display:flex;align-items:center;justify-content:center;gap:10px;transition:.15s;letter-spacing:-.2px}
+.pri:disabled{background:var(--card2);color:var(--mu);cursor:not-allowed}
+.pri:not(:disabled):active{transform:scale(.97);background:var(--g2)}
+.sec{width:100%;padding:13px;border-radius:12px;background:none;border:1.5px solid var(--border);color:var(--mu);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--f);margin-top:10px;transition:.15s}
+.sec:active{background:var(--card)}
+
+/* ══ SPLASH ══════════════════════════════════════════════════ */
+#s0{background:var(--bg);justify-content:space-between}
+.splash-top{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px}
+.splash-logo{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:32px}
+.splash-wordmark{font-size:32px;font-weight:900;letter-spacing:-1px;color:var(--tx)}
+.splash-claim{font-size:22px;font-weight:800;letter-spacing:-.5px;text-align:center;line-height:1.3;margin-bottom:10px}
+.splash-sub{font-size:14px;color:var(--mu);text-align:center;line-height:1.7;font-weight:500}
+.stat-row{display:flex;gap:0;background:var(--card);border:1px solid var(--border);border-radius:14px;margin:24px 0 0;overflow:hidden;width:100%}
+.stat-box{flex:1;padding:14px 10px;text-align:center;border-right:1px solid var(--border)}
+.stat-box:last-child{border-right:none}
+.stat-n{font-size:18px;font-weight:900;color:var(--green)}
+.stat-l{font-size:9px;color:var(--mu);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+.splash-foot{padding:20px 20px calc(24px + env(safe-area-inset-bottom,0px))}
+
+/* ══ SMS SCREEN ══════════════════════════════════════════════ */
+#s-sms{background:var(--bg)}
+.perm-icon{width:72px;height:72px;border-radius:20px;background:rgba(34,197,94,.1);border:1.5px solid rgba(34,197,94,.3);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 20px}
+.perm-title{font-size:24px;font-weight:900;letter-spacing:-.5px;text-align:center;margin-bottom:10px}
+.perm-sub{font-size:13px;color:var(--mu);text-align:center;line-height:1.7;font-weight:500;margin-bottom:28px}
+.trust-list{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+.trust-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border-radius:12px;border:1px solid var(--border)}
+.trust-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.trust-txt{font-size:12px;font-weight:600;color:var(--tx)}
+
+/* ══ PROCESSING ══════════════════════════════════════════════ */
+#s-proc{background:var(--bg);align-items:center;justify-content:center}
+.proc-ring{width:80px;height:80px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--green);animation:spin 1s linear infinite;margin:0 auto 28px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.proc-steps{display:flex;flex-direction:column;gap:12px;width:100%;max-width:280px}
+.proc-step{display:flex;align-items:center;gap:12px;opacity:.4;transition:opacity .4s}
+.proc-step.done{opacity:1}
+.proc-dot{width:10px;height:10px;border-radius:50%;background:var(--border);flex-shrink:0;transition:background .4s}
+.proc-step.done .proc-dot{background:var(--green)}
+.proc-lbl{font-size:13px;font-weight:700}
+
+/* ══ RESULTS ════════════════════════════════════════════════ */
+#s-result{background:var(--bg)}
+.state-hero{border-radius:18px;padding:22px;margin-bottom:14px;position:relative;overflow:hidden}
+.state-hero.risk{background:linear-gradient(135deg,rgba(220,38,38,.15),rgba(220,38,38,.05));border:1.5px solid rgba(220,38,38,.3)}
+.state-hero.warn{background:linear-gradient(135deg,rgba(217,119,6,.15),rgba(217,119,6,.05));border:1.5px solid rgba(217,119,6,.3)}
+.state-hero.good{background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(34,197,94,.05));border:1.5px solid rgba(34,197,94,.3)}
+.state-lbl{font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin-bottom:8px;opacity:.7}
+.state-val{font-size:32px;font-weight:900;letter-spacing:-.8px;margin-bottom:14px}
+.state-insights{display:flex;flex-direction:column;gap:8px}
+.si{font-size:13px;font-weight:600;line-height:1.55;color:var(--tx);display:flex;align-items:flex-start;gap:8px}
+.si-dot{width:6px;height:6px;border-radius:50%;margin-top:6px;flex-shrink:0}
+.result-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.metric{background:var(--card);border-radius:14px;padding:14px;border:1px solid var(--border)}
+.metric-val{font-size:22px;font-weight:900;margin-bottom:4px}
+.metric-lbl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.contin-card{background:var(--card);border-radius:16px;padding:18px;border:1px solid var(--border);margin-bottom:12px}
+.contin-lbl{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:8px}
+.contin-txt{font-size:14px;font-weight:700;line-height:1.55;margin-bottom:14px}
+
+/* ══ AUTH ════════════════════════════════════════════════════ */
+#s-auth{background:var(--bg)}
+.auth-wrap{flex:1;overflow-y:auto;padding:20px 20px;padding-top:calc(16px + env(safe-area-inset-top,0px))}
+.auth-hd{margin-bottom:22px}
+.auth-title{font-size:24px;font-weight:900;letter-spacing:-.5px;margin-bottom:6px}
+.auth-sub{font-size:13px;color:var(--mu);font-weight:500;line-height:1.6}
+.a-tabs{display:flex;background:var(--card);border-radius:12px;padding:3px;margin-bottom:20px;border:1px solid var(--border)}
+.a-tab{flex:1;padding:10px;border-radius:9px;border:none;background:none;font-size:13px;font-weight:700;color:var(--mu);cursor:pointer;font-family:var(--f);transition:.15s}
+.a-tab.on{background:var(--card2);color:var(--tx)}
+.a-inp{width:100%;padding:15px 14px;background:var(--card);border:1.5px solid var(--border);border-radius:12px;font-size:14px;color:var(--tx);font-family:var(--f);outline:none;margin-bottom:12px;transition:.15s}
+.a-inp:focus{border-color:var(--green)}
+.a-inp::placeholder{color:var(--mu)}
+.a-err{color:var(--red);font-size:12px;margin-bottom:10px;font-weight:600;display:none}
+.a-or{display:flex;align-items:center;gap:12px;margin:8px 0 12px}
+.a-line{flex:1;height:1px;background:var(--border)}
+.a-or-t{font-size:11px;color:var(--mu);font-weight:600}
+.a-skip{text-align:center;font-size:13px;color:var(--mu);cursor:pointer;font-weight:600;padding-top:12px}
+.a-skip span{color:var(--tx);font-weight:800}
+.result-tag{display:inline-block;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;margin-bottom:16px}
+.result-tag.risk{background:rgba(220,38,38,.15);color:#F87171}
+.result-tag.warn{background:rgba(217,119,6,.15);color:#FCD34D}
+.result-tag.good{background:rgba(34,197,94,.15);color:var(--green)}
+</style>
+</head>
+<body>
+
+<!-- ══ 0. SPLASH ═══════════════════════════════════════════════ -->
+<div class="scr on" id="s0">
+  <div class="splash-top">
+    <div class="splash-logo">
+      <svg width="80" height="80" viewBox="0 0 100 100" fill="none">
+        <path d="M 79,32 A 32,32 0 1,0 79,68" stroke="#22C55E" stroke-width="7" fill="none" stroke-linecap="butt"/>
+        <path d="M 68,39 A 20,20 0 1,0 68,61" stroke="#22C55E" stroke-width="4.5" fill="none" stroke-linecap="butt"/>
+        <rect x="33" y="41" width="26" height="18" rx="1.5" stroke="#22C55E" stroke-width="3.5" fill="none"/>
+        <circle cx="46" cy="50" r="5" fill="#22C55E"/>
+      </svg>
+      <div class="splash-wordmark">Cacree</div>
+    </div>
+    <div class="splash-claim">Understand your money<br/>without tracking it manually.</div>
+    <div class="splash-sub">Reads your SMS. Detects your patterns.<br/>Tells you exactly what's wrong.</div>
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-n">2.4K+</div><div class="stat-l">Users</div></div>
+      <div class="stat-box"><div class="stat-n">4</div><div class="stat-l">Countries</div></div>
+      <div class="stat-box"><div class="stat-n">20+</div><div class="stat-l">Providers</div></div>
+    </div>
+  </div>
+  <div class="splash-foot">
+    <!-- Primary: Social login (instant, no typing) -->
+    <button class="g-btn" onclick="googleSignIn()">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+      Continue with Google
+    </button>
+    <button class="fb-btn" onclick="facebookSignIn()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+      Continue with Facebook
+    </button>
+    <div style="display:flex;align-items:center;gap:10px;margin:12px 0">
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.15)"></div>
+      <span style="font-size:11px;color:var(--mu);font-weight:600">or</span>
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.15)"></div>
+    </div>
+    <button class="pri" onclick="goTo('s1')">Start Analysis (Email) →</button>
+    <button class="sec" onclick="goTo('s-auth')" style="margin-top:8px">Already have an account? Sign In</button>
+  </div>
+</div>
+
+<!-- ══ 1. INCOME STABILITY ════════════════════════════════════ -->
+<div class="scr" id="s1">
+  <div class="s-top">
+    <button class="back" onclick="goBack()">←</button>
+    <div class="prog-bar"><div class="prog-fill" style="width:20%"></div></div>
+    <div class="step-ct">1 of 5</div>
+  </div>
+  <div class="s-body">
+    <div class="big-q">How consistent is your income?</div>
+    <div class="hint">This tells us how to interpret your cash flow pattern.</div>
+    <div class="opts" id="o-income">
+      <button class="opt" data-v="stable" onclick="pick('o-income',this,'income')">
+        <div class="opt-tag">📅</div><div class="opt-left"><div class="opt-title">Same amount every month</div><div class="opt-sub">Salary, fixed contract, predictable</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="mostly" onclick="pick('o-income',this,'income')">
+        <div class="opt-tag">〜</div><div class="opt-left"><div class="opt-title">Mostly consistent, small changes</div><div class="opt-sub">Usually predictable with minor variation</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="irregular" onclick="pick('o-income',this,'income')">
+        <div class="opt-tag">⚡</div><div class="opt-left"><div class="opt-title">Irregular / unpredictable</div><div class="opt-sub">Gigs, commissions, business income</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="multiple" onclick="pick('o-income',this,'income')">
+        <div class="opt-tag">🔀</div><div class="opt-left"><div class="opt-title">Multiple income sources</div><div class="opt-sub">Salary + side income + business</div></div><div class="opt-check">✓</div>
+      </button>
+    </div>
+  </div>
+  <div class="s-foot"><button class="pri" id="n1" onclick="goTo('s2')" disabled>Next →</button></div>
+</div>
+
+<!-- ══ 2. SPENDING CONTROL ════════════════════════════════════ -->
+<div class="scr" id="s2">
+  <div class="s-top">
+    <button class="back" onclick="goBack()">←</button>
+    <div class="prog-bar"><div class="prog-fill" style="width:40%"></div></div>
+    <div class="step-ct">2 of 5</div>
+  </div>
+  <div class="s-body">
+    <div class="big-q">How often do you run out of money before next income?</div>
+    <div class="hint">Be honest — this is the most important signal in your financial profile.</div>
+    <div class="opts" id="o-cashflow">
+      <button class="opt" data-v="never" onclick="pick('o-cashflow',this,'cashflow')">
+        <div class="opt-tag">🟢</div><div class="opt-left"><div class="opt-title">Never</div><div class="opt-sub">Always have money left at end of cycle</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="rarely" onclick="pick('o-cashflow',this,'cashflow')">
+        <div class="opt-tag">🟡</div><div class="opt-left"><div class="opt-title">Rarely</div><div class="opt-sub">Occasionally tight, but manageable</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="sometimes" onclick="pick('o-cashflow',this,'cashflow')">
+        <div class="opt-tag">🟠</div><div class="opt-left"><div class="opt-title">Sometimes</div><div class="opt-sub">About half the time I'm running low</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="often" onclick="pick('o-cashflow',this,'cashflow')">
+        <div class="opt-tag">🔴</div><div class="opt-left"><div class="opt-title">Often</div><div class="opt-sub">Consistently struggle before next income</div></div><div class="opt-check">✓</div>
+      </button>
+    </div>
+  </div>
+  <div class="s-foot"><button class="pri" id="n2" onclick="goTo('s3')" disabled>Next →</button></div>
+</div>
+
+<!-- ══ 3. FINANCIAL PRESSURE ══════════════════════════════════ -->
+<div class="scr" id="s3">
+  <div class="s-top">
+    <button class="back" onclick="goBack()">←</button>
+    <div class="prog-bar"><div class="prog-fill" style="width:60%"></div></div>
+    <div class="step-ct">3 of 5</div>
+  </div>
+  <div class="s-body">
+    <div class="big-q">Which of these apply to you?</div>
+    <div class="multi-lbl">Select all that apply</div>
+    <div class="opts" id="o-pressure">
+      <button class="opt" data-v="loans" onclick="multi('o-pressure',this,'pressure')">
+        <div class="opt-tag">🏦</div><div class="opt-left"><div class="opt-title">Loan repayments</div><div class="opt-sub">Fuliza, bank loan, Tala, Mshwari, BNPL</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="social" onclick="multi('o-pressure',this,'pressure')">
+        <div class="opt-tag">👥</div><div class="opt-left"><div class="opt-title">Sending money to others</div><div class="opt-sub">Family, friends, obligations, emergencies</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="expenses" onclick="multi('o-pressure',this,'pressure')">
+        <div class="opt-tag">💸</div><div class="opt-left"><div class="opt-title">High daily expenses</div><div class="opt-sub">Transport, food, bills taking too much</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="nosavings" onclick="multi('o-pressure',this,'pressure')">
+        <div class="opt-tag">📉</div><div class="opt-left"><div class="opt-title">No savings</div><div class="opt-sub">Nothing set aside, living cycle to cycle</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="none" id="opt-none" onclick="multiNone('o-pressure',this,'pressure')">
+        <div class="opt-tag">✅</div><div class="opt-left"><div class="opt-title">None of the above</div><div class="opt-sub">My finances are under control</div></div><div class="opt-check">✓</div>
+      </button>
+    </div>
+  </div>
+  <div class="s-foot"><button class="pri" id="n3" onclick="goTo('s4')" disabled>Next →</button></div>
+</div>
+
+<!-- ══ 4. VISIBILITY ══════════════════════════════════════════ -->
+<div class="scr" id="s4">
+  <div class="s-top">
+    <button class="back" onclick="goBack()">←</button>
+    <div class="prog-bar"><div class="prog-fill" style="width:80%"></div></div>
+    <div class="step-ct">4 of 5</div>
+  </div>
+  <div class="s-body">
+    <div class="big-q">Do you currently understand where your money goes?</div>
+    <div class="hint">This tells us your starting point — no judgment.</div>
+    <div class="opts" id="o-vis">
+      <button class="opt" data-v="completely" onclick="pick('o-vis',this,'visibility')">
+        <div class="opt-tag">👁️</div><div class="opt-left"><div class="opt-title">Completely</div><div class="opt-sub">I track everything and know exactly</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="partially" onclick="pick('o-vis',this,'visibility')">
+        <div class="opt-tag">🔍</div><div class="opt-left"><div class="opt-title">Partially</div><div class="opt-sub">I have a rough idea but gaps exist</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="notrealley" onclick="pick('o-vis',this,'visibility')">
+        <div class="opt-tag">❓</div><div class="opt-left"><div class="opt-title">Not really</div><div class="opt-sub">I know the big items but lose the rest</div></div><div class="opt-check">✓</div>
+      </button>
+      <button class="opt" data-v="notatall" onclick="pick('o-vis',this,'visibility')">
+        <div class="opt-tag">🌑</div><div class="opt-left"><div class="opt-title">Not at all</div><div class="opt-sub">Money disappears and I can't explain it</div></div><div class="opt-check">✓</div>
+      </button>
+    </div>
+  </div>
+  <div class="s-foot"><button class="pri" id="n4" onclick="goTo('s5')" disabled>Next →</button></div>
+</div>
+
+<!-- ══ 5. CONTEXT INPUT ════════════════════════════════════════ -->
+<div class="scr" id="s5">
+  <div class="s-top">
+    <button class="back" onclick="goBack()">←</button>
+    <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
+    <div class="step-ct">5 of 5</div>
+  </div>
+  <div class="s-body">
+    <div class="big-q">What is your main financial concern right now?</div>
+    <div class="hint">Optional but powerful — the more context Cacree has, the sharper your insights.</div>
+    <textarea id="ctx-inp" style="width:100%;min-height:120px;padding:16px;background:var(--card);border:1.5px solid var(--border);border-radius:14px;font-size:14px;color:var(--tx);font-family:var(--f);outline:none;resize:none;line-height:1.6;transition:.15s" placeholder='e.g. "I spend too much on social obligations" or "My loan payments are killing me"' oninput="this.style.borderColor='var(--green)'"></textarea>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+      <div style="font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:4px">Quick picks</div>
+      <button onclick="setCtx('I spend too much and don\'t know where it goes')" style="text-align:left;padding:11px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--mu);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--f)">I spend too much and don't know where it goes</button>
+      <button onclick="setCtx('My loan repayments are consuming too much of my income')" style="text-align:left;padding:11px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--mu);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--f)">My loan repayments are consuming too much</button>
+      <button onclick="setCtx('I can never save — nothing is left by end of month')" style="text-align:left;padding:11px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--mu);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--f)">I can never save — nothing left by month end</button>
+    </div>
+  </div>
+  <div class="s-foot">
+    <button class="pri" onclick="goToSms()">Analyse My Finances →</button>
+    <button class="sec" onclick="goToSms()">Skip context</button>
+  </div>
+</div>
+
+<!-- ══ SMS PERMISSION ══════════════════════════════════════════ -->
+<div class="scr" id="s-sms">
+  <div class="s-body" style="display:flex;flex-direction:column;justify-content:center;padding-top:40px">
+    <div class="perm-icon">📲</div>
+    <div class="perm-title">Allow SMS Access</div>
+    <div class="perm-sub">Cacree reads your mobile money SMS to analyse your financial behaviour automatically. Nothing leaves your phone.</div>
+    <div class="trust-list">
+      <div class="trust-item"><div class="trust-dot"></div><div class="trust-txt">All analysis happens on your device only</div></div>
+      <div class="trust-item"><div class="trust-dot"></div><div class="trust-txt">M-Pesa · Tigo · MTN MoMo · FNB · KCB + 20 more</div></div>
+      <div class="trust-item"><div class="trust-dot"></div><div class="trust-txt">No raw SMS text is ever stored or transmitted</div></div>
+      <div class="trust-item"><div class="trust-dot"></div><div class="trust-txt">You can clear all data instantly at any time</div></div>
+    </div>
+  </div>
+  <div class="s-foot">
+    <button class="pri" onclick="doImport()">Allow SMS Access & Analyse →</button>
+    <button class="sec" onclick="skipSms()">Skip — I'll import manually</button>
+  </div>
+</div>
+
+<!-- ══ PROCESSING ══════════════════════════════════════════════ -->
+<div class="scr" id="s-proc" style="background:var(--bg)">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;gap:32px">
+    <div class="proc-ring"></div>
+    <div>
+      <div style="font-size:22px;font-weight:900;text-align:center;margin-bottom:6px">Analysing your finances</div>
+      <div style="font-size:13px;color:var(--mu);text-align:center;font-weight:500">Building your financial profile...</div>
+    </div>
+    <div class="proc-steps" id="proc-steps">
+      <div class="proc-step" id="ps1"><div class="proc-dot"></div><div class="proc-lbl">Reading transactions</div></div>
+      <div class="proc-step" id="ps2"><div class="proc-dot"></div><div class="proc-lbl">Detecting spending patterns</div></div>
+      <div class="proc-step" id="ps3"><div class="proc-dot"></div><div class="proc-lbl">Calculating debt pressure</div></div>
+      <div class="proc-step" id="ps4"><div class="proc-dot"></div><div class="proc-lbl">Generating your financial state</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RESULTS ════════════════════════════════════════════════ -->
+<div class="scr" id="s-result">
+  <div class="s-top" style="border-bottom:1px solid var(--border)">
+    <div style="font-size:14px;font-weight:800;color:var(--mu)">Your Financial Analysis</div>
+  </div>
+  <div class="s-body">
+    <div id="result-state-card" class="state-hero"></div>
+    <div class="result-metrics" id="result-metrics"></div>
+    <div class="contin-card">
+      <div class="contin-lbl">What Cacree found</div>
+      <div class="contin-txt" id="result-contin">Set up your account to unlock full transaction history, spending breakdown and trend analysis.</div>
+      <button class="pri" onclick="goTo('s-auth')">Save My Analysis →</button>
+    </div>
+    <button class="sec" onclick="skipToApp()">Continue without saving</button>
+  </div>
+</div>
+
+<!-- ══ AUTH ════════════════════════════════════════════════════ -->
+<div class="scr" id="s-auth">
+  <div class="auth-wrap">
+    <div class="auth-hd">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <svg width="26" height="26" viewBox="0 0 100 100" fill="none">
+          <path d="M 79,32 A 32,32 0 1,0 79,68" stroke="#22C55E" stroke-width="7" fill="none" stroke-linecap="butt"/>
+          <path d="M 68,39 A 20,20 0 1,0 68,61" stroke="#22C55E" stroke-width="4.5" fill="none" stroke-linecap="butt"/>
+          <rect x="33" y="41" width="26" height="18" rx="1.5" stroke="#22C55E" stroke-width="3.5" fill="none"/>
+          <circle cx="46" cy="50" r="5" fill="#22C55E"/>
+        </svg>
+        <span style="font-size:18px;font-weight:900;letter-spacing:-.4px">Cacree</span>
+      </div>
+      <div id="auth-result-badge" style="display:none"></div>
+      <div class="auth-title">Save your analysis</div>
+      <div class="auth-sub">Create an account to save your financial profile and unlock continuous tracking.</div>
+    </div>
+
+    <div class="a-tabs">
+      <button class="a-tab on" id="at-up" onclick="aTab('up')">Create Account</button>
+      <button class="a-tab"    id="at-in" onclick="aTab('in')">Sign In</button>
+    </div>
+
+    <div id="ap-up">
+      <div id="aerr-up" class="a-err"></div>
+      <!-- Social first -->
+      <button onclick="googleSignIn()" style="width:100%;padding:14px;border-radius:13px;background:#fff;border:1.5px solid #E5E7EB;color:#1f2937;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09V7.07H2.18C1.43 8.55 1 12s.43 3.45 1.18 4.93z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Continue with Google
+      </button>
+      <button onclick="facebookSignIn()" style="width:100%;padding:14px;border-radius:13px;background:#1877F2;border:none;color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        Continue with Facebook
+      </button>
+      <div class="a-or"><div class="a-line"></div><div class="a-or-t">or sign up with email</div><div class="a-line"></div></div>
+      <input class="a-inp" id="su-name"  type="text"  placeholder="Full name" autocomplete="name"/>
+      <input class="a-inp" id="su-email" type="email" placeholder="Email address" inputmode="email"/>
+      <input class="a-inp" id="su-phone" type="tel"   placeholder="Phone number" inputmode="tel"/>
+      <input class="a-inp" id="su-pass"  type="password" placeholder="Password (min 6 characters)"/>
+      <p style="font-size:10px;color:var(--mu);margin-bottom:16px;line-height:1.7">Your SMS data never leaves your device. Unsubscribe anytime.</p>
+      <button class="pri" onclick="doSignup()">✓ Create Account</button>
+      <div class="a-skip" onclick="skipToApp()">Skip — <span>Continue as Guest</span></div>
+    </div>
+
+    <div id="ap-in" style="display:none">
+      <div id="aerr-in" class="a-err"></div>
+      <input class="a-inp" id="si-email" type="email" placeholder="Email address" inputmode="email"/>
+      <input class="a-inp" id="si-pass"  type="password" placeholder="Password"/>
+      <button class="pri" onclick="doSignin()">Sign In →</button>
+      <div class="a-skip" onclick="skipToApp()">Skip — <span>Continue as Guest</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ─────────────────────────────────────────────────────
+var A = {income:"",cashflow:"",pressure:[],visibility:"",context:""};
+var importedTxs = [], navHistory = [], curId = "s0";
+
+// ── NAVIGATION — simple show/hide, no transitions ─────────────
+function goTo(id) {
+  try {
+    navHistory.push(curId);
+    var allScreens = document.querySelectorAll(".scr");
+    for(var i=0; i<allScreens.length; i++){
+      allScreens[i].className = "scr";
+    }
+    var next = document.getElementById(id);
+    if(next){ next.className = "scr on"; }
+    curId = id;
+    window.scrollTo(0,0);
+  } catch(e) { alert("Nav error: "+e.message); }
+}
+
+function goBack() {
+  try {
+    var prev = navHistory.pop();
+    if(!prev) return;
+    var allScreens = document.querySelectorAll(".scr");
+    for(var i=0; i<allScreens.length; i++){
+      allScreens[i].className = "scr";
+    }
+    var p = document.getElementById(prev);
+    if(p){ p.className = "scr on"; }
+    curId = prev;
+  } catch(e) {}
+}
+
+// ── PICKERS ───────────────────────────────────────────────────
+function pick(gid, btn, key) {
+  document.querySelectorAll("#"+gid+" .opt").forEach(function(o){ o.classList.remove("on"); });
+  btn.classList.add("on");
+  A[key] = btn.dataset.v;
+  var btnMap = {"o-income":"n1","o-cashflow":"n2","o-vis":"n4"};
+  var nb = document.getElementById(btnMap[gid]);
+  if(nb) nb.disabled = false;
+}
+
+function multi(gid, btn, key) {
+  // Deselect "none" if anything else selected
+  var noneBtn = document.getElementById("opt-none");
+  if(noneBtn) noneBtn.classList.remove("on");
+  btn.classList.toggle("on");
+  A[key] = [];
+  document.querySelectorAll("#"+gid+" .opt.on").forEach(function(o){ A[key].push(o.dataset.v); });
+  document.getElementById("n3").disabled = A[key].length === 0;
+}
+
+function multiNone(gid, btn, key) {
+  document.querySelectorAll("#"+gid+" .opt").forEach(function(o){ o.classList.remove("on"); });
+  btn.classList.add("on");
+  A[key] = ["none"];
+  document.getElementById("n3").disabled = false;
+}
+
+function setCtx(v) {
+  document.getElementById("ctx-inp").value = v;
+  document.getElementById("ctx-inp").style.borderColor = "var(--green)";
+}
+
+function goToSms() {
+  A.context = document.getElementById("ctx-inp").value.trim();
+  goTo("s-sms");
+}
+
+// ── SMS IMPORT ────────────────────────────────────────────────
+function doImport() {
+  var bridge = window.Android || window.AndroidBridge;
+  goTo("s-proc");
+  runProcessing(function(){
+    if(bridge && bridge.hasSmsPermission && bridge.hasSmsPermission()) {
+      try {
+        var raw = bridge.importSms();
+        if(raw && raw !== "[]") importedTxs = JSON.parse(raw);
+      } catch(e) {}
+    }
+    buildResults();
+    goTo("s-result");
+  });
+}
+
+function skipSms() {
+  goTo("s-proc");
+  runProcessing(function(){
+    buildResults();
+    goTo("s-result");
+  });
+}
+
+function runProcessing(cb) {
+  var steps = ["ps1","ps2","ps3","ps4"];
+  var i = 0;
+  var t = setInterval(function(){
+    if(i < steps.length) { document.getElementById(steps[i]).classList.add("done"); i++; }
+    else { clearInterval(t); setTimeout(cb, 400); }
+  }, 600);
+}
+
+// ── BUILD RESULTS ─────────────────────────────────────────────
+function buildResults() {
+  // Determine state from questionnaire answers
+  var score = 0;
+  if(A.cashflow === "often")   score += 3;
+  if(A.cashflow === "sometimes") score += 2;
+  if(A.cashflow === "rarely")  score += 1;
+  if(A.pressure.indexOf("loans") >= 0)     score += 2;
+  if(A.pressure.indexOf("social") >= 0)    score += 1;
+  if(A.pressure.indexOf("nosavings") >= 0) score += 2;
+  if(A.visibility === "notatall")  score += 2;
+  if(A.visibility === "notrealley")score += 1;
+  if(A.income === "irregular")     score += 1;
+
+  // SMS data boosts accuracy
+  if(importedTxs.length > 0) {
+    var inc=0, exp=0, debt=0, peer=0;
+    importedTxs.forEach(function(t){
+      if(t.type==="income") inc+=t.amount;
+      else {
+        exp+=t.amount;
+        if(t.category==="Debt") debt+=t.amount;
+        if(t.category==="Peer") peer+=t.amount;
+      }
+    });
+    var debtR = exp>0 ? debt/exp : 0;
+    var socialR = exp>0 ? peer/exp : 0;
+    var burnR = inc>0 ? exp/inc : 0;
+    if(debtR>0.3) score+=3;
+    if(socialR>0.2) score+=2;
+    if(burnR>0.9) score+=3;
+    if(inc>0&&exp<inc*0.8) score = Math.max(0, score-2);
+  }
+
+  var state = score >= 7 ? "RISK" : score >= 4 ? "WARNING" : "STABLE";
+  var cls   = state === "RISK" ? "risk" : state === "WARNING" ? "warn" : "good";
+  var color = state === "RISK" ? "#F87171" : state === "WARNING" ? "#FCD34D" : "#4ADE80";
+
+  // Build insights from answers
+  var insights = [];
+  if(A.cashflow === "often" || A.cashflow === "sometimes")
+    insights.push({t:"You're running out before next income — cashflow is under structural pressure.", c:"#F87171"});
+  if(A.pressure.indexOf("loans") >= 0)
+    insights.push({t:"Loan repayments are part of your financial drag. This is your highest risk signal.", c:"#F87171"});
+  if(A.pressure.indexOf("social") >= 0)
+    insights.push({t:"Social transfer pressure detected — capital is leaking through peer obligations.", c:"#FCD34D"});
+  if(A.pressure.indexOf("nosavings") >= 0)
+    insights.push({t:"Zero savings buffer means a single financial shock could destabilise you.", c:"#FCD34D"});
+  if(A.visibility === "notatall" || A.visibility === "notrealley")
+    insights.push({t:"You can't defend a position you can't see. SMS analysis will change this.", c:"#9CA3AF"});
+  if(A.income === "irregular")
+    insights.push({t:"Irregular income requires stronger expense discipline to stay solvent.", c:"#9CA3AF"});
+  if(insights.length === 0)
+    insights.push({t:"Your financial signals look controlled. Cacree will monitor for drift over time.", c:"#4ADE80"});
+
+  // State card
+  var insHtml = insights.map(function(s){
+    return "<div class='si'><div class='si-dot' style='background:"+s.c+"'></div><div>"+s.t+"</div></div>";
+  }).join("");
+
+  document.getElementById("result-state-card").className = "state-hero "+cls;
+  document.getElementById("result-state-card").innerHTML =
+    "<div class='state-lbl'>Financial State</div>" +
+    "<div class='state-val' style='color:"+color+"'>"+state+"</div>" +
+    "<div class='state-insights'>"+insHtml+"</div>";
+
+  // Metrics from questionnaire
+  var metrics = [
+    {v: A.cashflow==="never"?"Low":A.cashflow==="rarely"?"Medium":A.cashflow==="sometimes"?"High":"Critical", l:"Cash Pressure",
+     c: A.cashflow==="never"?"#4ADE80":A.cashflow==="rarely"?"#FCD34D":"#F87171"},
+    {v: A.visibility==="completely"?"Full":A.visibility==="partially"?"Partial":"Blind", l:"Money Visibility",
+     c: A.visibility==="completely"?"#4ADE80":A.visibility==="partially"?"#FCD34D":"#F87171"},
+    {v: A.pressure.indexOf("loans")>=0?"Active":"None detected", l:"Debt Pressure",
+     c: A.pressure.indexOf("loans")>=0?"#F87171":"#4ADE80"},
+    {v: A.income==="stable"?"Stable":A.income==="irregular"?"Volatile":"Variable", l:"Income Stability",
+     c: A.income==="stable"?"#4ADE80":A.income==="irregular"?"#F87171":"#FCD34D"}
+  ];
+  document.getElementById("result-metrics").innerHTML = metrics.map(function(m){
+    return "<div class='metric'><div class='metric-val' style='color:"+m.c+"'>"+m.v+"</div><div class='metric-lbl'>"+m.l+"</div></div>";
+  }).join("");
+
+  // Context-aware conclusion
+  var contin = importedTxs.length > 0
+    ? importedTxs.length+" transactions analysed. Full history, spending breakdown and 30-day trends available after account setup."
+    : "Create your account to start tracking real transactions from your SMS inbox automatically.";
+  document.getElementById("result-contin").textContent = contin;
+
+  // Set badge in auth screen
+  var badge = document.getElementById("auth-result-badge");
+  badge.style.display = "block";
+  badge.innerHTML = "<div class='result-tag "+cls+"'>Analysis: "+state+"</div>";
+}
+
+// ── AUTH ──────────────────────────────────────────────────────
+function aTab(t){
+  document.getElementById("ap-up").style.display = t==="up"?"block":"none";
+  document.getElementById("ap-in").style.display = t==="in"?"block":"none";
+  document.getElementById("at-up").classList.toggle("on",t==="up");
+  document.getElementById("at-in").classList.toggle("on",t==="in");
+}
+
+function showErr(id,msg){ var e=document.getElementById(id); e.textContent=msg; e.style.display="block"; }
+function hideErr(id){ document.getElementById(id).style.display="none"; }
+
+function googleSignIn(){
+  // Simulated Google OAuth - creates a Google-style profile
+  // In production, integrate with Google Sign-In SDK via Android native bridge
+  var name=prompt("Enter your Google account name (Google Sign-In):");
+  if(!name||!name.trim())return;
+  var email=prompt("Enter your Google email:");
+  if(!email||!email.includes("@"))return;
+  var user={name:name.trim(),email:email.trim(),phone:"",authProvider:"google",created:Date.now()};
+  localStorage.setItem("cu",JSON.stringify(user));
+  var b=window.Android||window.AndroidBridge;
+  if(b){try{b.saveUserProfile(email,name,"");}catch(e){}try{b.markRegistered();}catch(e){}}
+  window.location.href="index.html";
+}
+
+function facebookSignIn(){
+  // Simulated Facebook OAuth
+  var name=prompt("Enter your Facebook name (Facebook Sign-In):");
+  if(!name||!name.trim())return;
+  var email=prompt("Enter your Facebook email:");
+  if(!email||!email.includes("@"))return;
+  var user={name:name.trim(),email:email.trim(),phone:"",authProvider:"facebook",created:Date.now()};
+  localStorage.setItem("cu",JSON.stringify(user));
+  var b=window.Android||window.AndroidBridge;
+  if(b){try{b.saveUserProfile(email,name,"");}catch(e){}try{b.markRegistered();}catch(e){}}
+  window.location.href="index.html";
+}
+
+function doSignup(){
+  hideErr("aerr-up");
+  var name  = document.getElementById("su-name").value.trim();
+  var email = document.getElementById("su-email").value.trim();
+  var phone = document.getElementById("su-phone").value.trim();
+  var pass  = document.getElementById("su-pass").value;
+  if(!name)             { showErr("aerr-up","Enter your full name."); return; }
+  if(!email.includes("@")){ showErr("aerr-up","Enter a valid email address."); return; }
+  if(pass.length < 6)   { showErr("aerr-up","Password must be at least 6 characters."); return; }
+  var user = {name:name,email:email,phone:phone,analysis:A,created:Date.now()};
+  localStorage.setItem("cu", JSON.stringify(user));
+  var b = window.Android||window.AndroidBridge;
+  if(b){ try{b.saveUserProfile(email,name,phone);}catch(e){} try{b.markRegistered();}catch(e){} }
+  window.location.href = "index.html";
+}
+
+function doSignin(){
+  hideErr("aerr-in");
+  var email = document.getElementById("si-email").value.trim();
+  var pass  = document.getElementById("si-pass").value;
+  if(!email.includes("@")){ showErr("aerr-in","Enter a valid email address."); return; }
+  if(!pass){ showErr("aerr-in","Enter your password."); return; }
+  var stored = JSON.parse(localStorage.getItem("cu")||"null");
+  if(stored && stored.email === email){
+    var b = window.Android||window.AndroidBridge;
+    if(b){ try{b.markRegistered();}catch(e){} }
+    window.location.href = "index.html";
+  } else {
+    showErr("aerr-in","Account not found on this device. Create an account first.");
+  }
+}
+
+function skipToApp(){
+  localStorage.setItem("cu_guest","1");
+  var b = window.Android||window.AndroidBridge;
+  if(b){ try{b.markRegistered();}catch(e){} }
+  window.location.href = "index.html";
+}
+</script>
+</body>
+</html>

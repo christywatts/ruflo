@@ -1,0 +1,77 @@
+name: Build & Upload to Google Play
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cacree/**'
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Google Play track (internal / alpha / beta / production)'
+        required: true
+        default: 'internal'
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  build-and-upload:
+    name: Build Release AAB & Upload
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('cacree/**/*.gradle*', 'cacree/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > cacree/cacree-release.jks
+
+      - name: Build release AAB
+        working-directory: cacree
+        run: ./gradlew bundleRelease
+        env:
+          KEYSTORE_PATH: cacree-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cacree-release-aab
+          path: cacree/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 7
+
+      - name: Upload to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.cacree.app
+          releaseFiles: cacree/app/build/outputs/bundle/release/app-release.aab
+          track: ${{ github.event.inputs.track || 'internal' }}
+          status: completed
+          releaseName: v${{ github.run_number }}
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f cacree/cacree-release.jks

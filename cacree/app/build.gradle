@@ -1,0 +1,73 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.cacree.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.cacree.app"
+        minSdk 24
+        targetSdk 35
+        versionCode 15
+        versionName "5.0.0"
+    }
+
+    // Read signing credentials from keystore.properties (local) or env vars (CI)
+    def keystorePropsFile = rootProject.file("keystore.properties")
+    def keystoreProps = new Properties()
+    if (keystorePropsFile.exists()) {
+        keystoreProps.load(new FileInputStream(keystorePropsFile))
+    }
+
+    signingConfigs {
+        release {
+            storeFile = keystoreProps['storeFile']
+                    ? file(keystoreProps['storeFile'])
+                    : (System.getenv('KEYSTORE_PATH') ? file(System.getenv('KEYSTORE_PATH')) : null)
+            storePassword = keystoreProps['storePassword'] ?: System.getenv('KEYSTORE_PASSWORD')
+            keyAlias      = keystoreProps['keyAlias']      ?: System.getenv('KEY_ALIAS')
+            keyPassword   = keystoreProps['keyPassword']   ?: System.getenv('KEY_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            debuggable true
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22"
+        force "org.jetbrains.kotlin:kotlin-stdlib-common:1.8.22"
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.core:core-ktx:1.13.1'
+}
