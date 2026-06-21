@@ -2,6 +2,7 @@ package com.cacree.app;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -17,17 +18,10 @@ import android.view.WindowManager;
 import android.webkit.*;
 import android.widget.EditText;
 import android.widget.Toast;
-import androidx.activity.OnBackPressedCallback;
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsControllerCompat;
 import java.util.*;
 import org.json.*;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
     private WebView wv;
     private DatabaseHelper db;
@@ -43,17 +37,28 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // ── EDGE-TO-EDGE: glass UI extends under status bar ──────
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        if (Build.VERSION.SDK_INT >= 21) {
-            getWindow().setStatusBarColor(Color.TRANSPARENT);
-            getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        // Edge-to-edge: glass UI extends under status bar
+        if (Build.VERSION.SDK_INT >= 30) {
+            getWindow().setDecorFitsSystemWindows(false);
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         }
-        // White icons on dark glass bg
-        WindowInsetsControllerCompat ctrl =
-            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        ctrl.setAppearanceLightStatusBars(false);
-        ctrl.setAppearanceLightNavigationBars(false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+
+        // Dark status/nav bar icons (white icons on dark glass bg)
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController ctrl = getWindow().getInsetsController();
+            if (ctrl != null) {
+                ctrl.setSystemBarsAppearance(0,
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+            }
+        }
+
         // Display cutout (notch) — API 28+
         if (Build.VERSION.SDK_INT >= 28) {
             getWindow().getAttributes().layoutInDisplayCutoutMode =
@@ -95,7 +100,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 Log.d(TAG, "Loaded: " + url);
-                // Inject safe-area CSS via JS after page loads
                 injectSafeAreaVars();
             }
         });
@@ -162,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
         wv.loadUrl("file:///android_asset/index.html");
         Log.d(TAG, "loadUrl → index.html");
 
-        // Init DB after short delay (WebView loads async)
+        // Init DB after short delay
         wv.postDelayed(() -> {
             try {
                 prefs = getSharedPreferences("cacree", MODE_PRIVATE);
@@ -173,22 +177,17 @@ public class MainActivity extends AppCompatActivity {
 
         // Request SMS permission after UI settles
         wv.postDelayed(this::requestPerms, 3000);
-
-        // Handle back press with predictive-back API (Android 13+) and WebView history
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                if (wv != null && wv.canGoBack()) {
-                    wv.goBack();
-                } else {
-                    setEnabled(false);
-                    getOnBackPressedDispatcher().onBackPressed();
-                }
-            }
-        });
     }
 
-    /** Injects actual status bar height so the glass top bar clears the system bar */
+    @Override
+    public void onBackPressed() {
+        if (wv != null && wv.canGoBack()) {
+            wv.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
     private void injectSafeAreaVars() {
         int statusBarPx = 0;
         int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
@@ -203,18 +202,16 @@ public class MainActivity extends AppCompatActivity {
     private void requestPerms() {
         try {
             List<String> need = new ArrayList<>();
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS)
-                    != PackageManager.PERMISSION_GRANTED)
+            if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.READ_SMS);
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
-                    != PackageManager.PERMISSION_GRANTED)
+            if (checkSelfPermission(Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.RECEIVE_SMS);
             if (Build.VERSION.SDK_INT >= 33 &&
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                             != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.POST_NOTIFICATIONS);
             if (!need.isEmpty())
-                ActivityCompat.requestPermissions(this, need.toArray(new String[0]), SMS_CODE);
+                requestPermissions(need.toArray(new String[0]), SMS_CODE);
         } catch (Exception e) { Log.e(TAG, "requestPerms: " + e.getMessage()); }
     }
 
@@ -239,8 +236,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int code,
-            @NonNull String[] perms, @NonNull int[] res) {
+    public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         super.onRequestPermissionsResult(code, perms, res);
         final boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
         Log.d(TAG, "Permission result: " + ok + " code=" + code);
@@ -254,14 +250,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (wv != null) wv.onResume();
-        SmsReceiver.setWebView(wv);   // register live WebView for real-time push
+        SmsReceiver.setWebView(wv);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         if (wv != null) wv.onPause();
-        SmsReceiver.setWebView(null); // unregister — app backgrounded
+        SmsReceiver.setWebView(null);
     }
 
     @Override
@@ -285,7 +281,6 @@ public class MainActivity extends AppCompatActivity {
             return prefs;
         }
 
-        /** Import all SMS, parse, dedup, return JSON array */
         @JavascriptInterface
         public String importSms() {
             try {
@@ -300,7 +295,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        /** Open the native Android share sheet (all apps, not just WhatsApp) */
         @JavascriptInterface
         public void shareText(String text) {
             try {
@@ -313,38 +307,17 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { Log.e(TAG, "shareText: " + e); }
         }
 
-        /** Write a CSV file and open the share sheet with it attached. */
         @JavascriptInterface
         public void exportCsv(final String filename, final String content) {
+            // Fall back to plain text share — avoids FileProvider dependency
             try {
-                String fname = (filename == null || filename.isEmpty()) ? "cacree_statement.csv" : filename;
-                java.io.File dir = new java.io.File(getCacheDir(), "exports");
-                if (!dir.exists()) dir.mkdirs();
-                java.io.File f = new java.io.File(dir, fname);
-                java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
-                fos.write((content != null ? content : "").getBytes("UTF-8"));
-                fos.close();
-                android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
-                        MainActivity.this, "com.cacree.app.fileprovider", f);
-                Intent send = new Intent(Intent.ACTION_SEND);
-                send.setType("text/csv");
-                send.putExtra(Intent.EXTRA_STREAM, uri);
-                send.putExtra(Intent.EXTRA_SUBJECT, "CACREE Statement");
-                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                Intent chooser = Intent.createChooser(send, "Export statement");
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(chooser);
+                String text = content != null ? content : "";
+                shareText(text);
             } catch (Exception e) {
                 Log.e(TAG, "exportCsv: " + e);
-                shareText(content);   // fallback: share as plain text
             }
         }
 
-        /**
-         * Async SMS import — runs on a background thread so the WebView's JS
-         * thread (and the whole UI) stays responsive during the scan.
-         * Result is delivered via window.onSmsImported(jsonArray).
-         */
         @JavascriptInterface
         public void importSmsAsync() {
             new Thread(() -> {
@@ -372,7 +345,6 @@ public class MainActivity extends AppCompatActivity {
             }, "cacree-sms-import").start();
         }
 
-        /** Return all stored transactions as JSON — called on app boot */
         @JavascriptInterface
         public String getTransactions() {
             try {
@@ -381,7 +353,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { return "[]"; }
         }
 
-        /** Return transactions for a specific currency */
         @JavascriptInterface
         public String getTransactionsByCurrency(String currency) {
             try {
@@ -392,20 +363,19 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public boolean hasSmsPermission() {
-            return ContextCompat.checkSelfPermission(MainActivity.this,
-                    Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED;
+            return checkSelfPermission(Manifest.permission.READ_SMS)
+                    == PackageManager.PERMISSION_GRANTED;
         }
 
         @JavascriptInterface
         public void requestSmsPermission() {
             try {
-                ActivityCompat.requestPermissions(MainActivity.this,
+                requestPermissions(
                     new String[]{ Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS },
                     SMS_CODE);
             } catch (Exception e) { Log.e(TAG, "reqSms: " + e); }
         }
 
-        /** Save full user profile as JSON string */
         @JavascriptInterface
         public void saveUserProfile(String email, String name, String phone) {
             try {
@@ -429,7 +399,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { return "{}"; }
         }
 
-        /** Set Pro status (wire to real billing in production) */
         @JavascriptInterface
         public void setPro(boolean active) {
             getPrefs().edit().putBoolean("pro", active).apply();
@@ -440,7 +409,6 @@ public class MainActivity extends AppCompatActivity {
             return getPrefs().getBoolean("pro", false);
         }
 
-        /** Save base currency preference */
         @JavascriptInterface
         public void setBaseCurrency(String code) {
             getPrefs().edit().putString("base_currency", code != null ? code : "USD").apply();
@@ -451,7 +419,6 @@ public class MainActivity extends AppCompatActivity {
             return getPrefs().getString("base_currency", "USD");
         }
 
-        /** Clear all transaction data */
         @JavascriptInterface
         public void clearAll() {
             try {
@@ -468,7 +435,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { return 0; }
         }
 
-        /** Run intelligence engine and return JSON insights */
         @JavascriptInterface
         public String getInsights() {
             try {
@@ -482,13 +448,11 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { return "[]"; }
         }
 
-        /** Show a native toast (for critical errors where JS toast may not be visible) */
         @JavascriptInterface
         public void nativeToast(final String msg) {
             runOnUiThread(() -> Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show());
         }
 
-        /** Post a system notification (used by budget alerts). */
         @JavascriptInterface
         public void notify(final String title, final String body) {
             try {
