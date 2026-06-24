@@ -1781,7 +1781,7 @@ function runImportScan(){
         if(parsed&&parsed.error)toast('Import error: '+parsed.error);
         else if(Array.isArray(parsed)&&parsed.length)imported=parsed.map(mig).filter(function(t){return t&&t.amount>0;});
       }catch(e){toast('Parse error — trying sync fallback');}
-      finishScan(imported);
+      setTimeout(function(){finishScan(imported);},0);
     };
     try{B.importSmsAsync();return;}catch(e){}
   }
@@ -1812,10 +1812,12 @@ function finishScan(imported){
     else if(t.category==='Other'||!CATMAP[t.category]){var c=autoCat(t.merchant,t.type,t.raw||'');if(c!=='Other')t.category=c;}
     return t;
   });
-  persist();
- }catch(e){try{persist();}catch(_){}}
- /* NO animation — go straight to a clean finish (prevents the post-import freeze) */
- finishImport();
+  /* defer persist + UI unlock so the event loop can process pending taps first */
+ }catch(e){}
+ setTimeout(function(){
+  try{persist();}catch(_){}
+  finishImport();
+ },0);
 }
 function finishImport(){
   /* tear down overlay + unlock immediately */

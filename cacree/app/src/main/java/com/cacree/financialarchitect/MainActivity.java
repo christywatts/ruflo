@@ -338,9 +338,19 @@ public class MainActivity extends Activity {
                 }
                 final String payload = result;
                 if (wv != null) wv.post(() -> {
-                    if (wv != null) wv.evaluateJavascript(
-                        "if(window.onSmsImported)window.onSmsImported(" +
-                        payload + ");", null);
+                    if (wv != null) {
+                        // Pass as a quoted JSON string so JS uses JSON.parse() internally.
+                        // Passing as a JS object literal forces V8 to parse a potentially
+                        // large AST on the renderer thread, freezing touch input.
+                        String escaped = payload
+                            .replace("\\", "\\\\")
+                            .replace("'",  "\\'")
+                            .replace("\r", "")
+                            .replace("\n", "");
+                        wv.evaluateJavascript(
+                            "if(window.onSmsImported)window.onSmsImported('" +
+                            escaped + "');", null);
+                    }
                 });
             }, "cacree-sms-import").start();
         }
