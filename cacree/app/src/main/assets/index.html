@@ -411,7 +411,7 @@ html.light .nav{background:rgba(244,246,249,.75);}
   <div class="hdl"></div><div class="sheet-title" id="bud-sheet-title">Create Budget</div>
   <div class="flbl">Category</div>
   <div class="cat-grid" id="bud-cats"></div>
-  <div class="flbl">Monthly Limit (TSh)</div>
+  <div class="flbl" id="bud-lmt-lbl">Monthly Limit (TSh)</div>
   <input class="finput" id="bud-amt" type="number" inputmode="numeric" placeholder="e.g. 500000">
   <button class="cta" style="margin-top:16px" onclick="saveBudget()">Save Budget</button>
   <button id="bud-del" style="display:none;width:100%;margin-top:10px;padding:13px;border-radius:13px;border:1px solid rgba(255,71,87,.4);background:none;color:var(--red);font-weight:800;font-size:13px;cursor:pointer" onclick="deleteBudget()">Delete Budget</button>
@@ -1290,12 +1290,16 @@ function rBudget(){
   var c=compute(getTxs('month'));
   var totLim=0,totSp=0,html='';
   BUDGETS.forEach(function(b,i){
-    var sp=c.byCat[b.cat]||0;totLim+=b.limit;totSp+=sp;
-    var pct=Math.min(Math.round(sp/b.limit*100),999);
+    /* convert spending (already in display currency via cv()) vs limit in budget's currency */
+    var sp=c.byCat[b.cat]||0;
+    /* limit may be stored in a different currency — convert to current display currency */
+    var lim=cv(b.limit,b.cur||PROF.cur);
+    totLim+=lim;totSp+=sp;
+    var pct=Math.min(Math.round(sp/lim*100),999);
     var col=pct>100?'var(--red)':pct>80?'var(--amber)':'var(--acc)';
     html+='<div class="bud-row" onclick="openBudgetEdit('+i+')"><div class="bud-top"><span>'+cIc(b.cat)+' '+esc(b.cat)+'</span><span style="color:'+col+'">'+pct+'%</span></div>'+
       '<div class="bar-track"><div class="bar-fill" style="background:'+col+';width:'+Math.min(pct,100)+'%"></div></div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:6px"><span>'+fmt(sp,true)+' spent</span><span>of '+fmt(b.limit,true)+'</span></div></div>';
+      '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:6px"><span>'+fmt(sp,true)+' spent</span><span>of '+fmt(lim,true)+'</span></div></div>';
   });
   el.innerHTML=html;
   sum.style.display='block';
@@ -1314,10 +1318,11 @@ function computeAlerts(){
   var out=[];
   BUDGETS.forEach(function(b){
     var sp=c.byCat[b.cat]||0;
-    if(b.limit<=0)return;
-    var pct=Math.round(sp/b.limit*100);
+    var lim=cv(b.limit,b.cur||PROF.cur);
+    if(lim<=0)return;
+    var pct=Math.round(sp/lim*100);
     if(pct>=80){
-      out.push({cat:b.cat,pct:pct,sp:sp,limit:b.limit,level:pct>=100?'over':'near'});
+      out.push({cat:b.cat,pct:pct,sp:sp,limit:lim,level:pct>=100?'over':'near'});
     }
   });
   out.sort(function(a,b){return b.pct-a.pct;});
@@ -1368,7 +1373,10 @@ function openBudgetEdit(i){
   _budEdit=i;
   var b=i!=null?BUDGETS[i]:null;
   document.getElementById('bud-sheet-title').textContent=b?'Edit Budget':'Create Budget';
-  document.getElementById('bud-amt').value=b?b.limit:'';
+  /* show limit converted to current display currency */
+  var dispLimit=b?cv(b.limit,b.cur||PROF.cur):'';
+  document.getElementById('bud-amt').value=dispLimit||'';
+  document.getElementById('bud-lmt-lbl').textContent='Monthly Limit ('+PROF.cur+')';
   document.getElementById('bud-del').style.display=b?'block':'none';
   var sel=b?b.cat:null;
   document.getElementById('bud-cats').innerHTML=CATS.filter(function(c){return c.n!=='Transfers';}).map(function(c){
@@ -1386,10 +1394,12 @@ function saveBudget(){
   if(!sel){toast('Pick a category');return;}
   if(amt<=0){toast('Enter a limit');return;}
   var cat=sel.getAttribute('data-cat');
-  if(_budEdit!=null)BUDGETS[_budEdit]={cat:cat,limit:amt};
+  /* store limit in current display currency so the currency is always explicit */
+  var entry={cat:cat,limit:amt,cur:PROF.cur};
+  if(_budEdit!=null)BUDGETS[_budEdit]=entry;
   else{
-    for(var i=0;i<BUDGETS.length;i++){if(BUDGETS[i].cat===cat){BUDGETS[i].limit=amt;persist();closeOv('ov-budget');rBudget();toast('Budget updated');return;}}
-    BUDGETS.push({cat:cat,limit:amt});
+    for(var i=0;i<BUDGETS.length;i++){if(BUDGETS[i].cat===cat){BUDGETS[i]=entry;persist();closeOv('ov-budget');rBudget();toast('Budget updated');return;}}
+    BUDGETS.push(entry);
   }
   persist();closeOv('ov-budget');rBudget();toast('Budget saved');
 }
@@ -1773,15 +1783,20 @@ function runImportScan(){
     /* background-thread scan: UI stays responsive, result arrives via callback */
     window.onSmsImported=function(raw){
       if(_impWatch){clearTimeout(_impWatch);_impWatch=null;}
-      var imported=[];
       try{
         var parsed=typeof raw==='string'?JSON.parse(raw):raw;
-        /* defensive: if still a string (old double-encoding), parse again */
         if(typeof parsed==='string')parsed=JSON.parse(parsed);
-        if(parsed&&parsed.error)toast('Import error: '+parsed.error);
-        else if(Array.isArray(parsed)&&parsed.length)imported=parsed.map(mig).filter(function(t){return t&&t.amount>0;});
-      }catch(e){toast('Parse error — trying sync fallback');}
-      setTimeout(function(){finishScan(imported);},0);
+        if(parsed&&parsed.error){toast('Import error: '+parsed.error);finishScan([]);return;}
+        /* New path: native side returns {count:N} — load from DB in pages so we
+           never pass a huge JSON blob through evaluateJavascript at once. */
+        if(parsed&&typeof parsed.count==='number'&&B.getTransactionsPage){
+          loadTxPages(parsed.count,0);return;
+        }
+        /* Legacy path: native side returned the array directly */
+        var imported=[];
+        if(Array.isArray(parsed)&&parsed.length)imported=parsed.map(mig).filter(function(t){return t&&t.amount>0;});
+        setTimeout(function(){finishScan(imported);},0);
+      }catch(e){toast('Parse error — trying sync fallback');finishScan([]);}
     };
     try{B.importSmsAsync();return;}catch(e){}
   }
@@ -1797,6 +1812,30 @@ function runImportScan(){
     if(_impWatch){clearTimeout(_impWatch);_impWatch=null;}
     finishScan(imported);
   },80);
+}
+var _TX_PAGE_SIZE=200;
+function loadTxPages(total,offset){
+  /* Load transactions from the native DB in small pages, yielding to the event
+     loop between each page so taps remain responsive during large imports. */
+  var B=getB();
+  if(!B||!B.getTransactionsPage){finishScan([]);return;}
+  try{
+    var raw=B.getTransactionsPage(offset,_TX_PAGE_SIZE);
+    var page=JSON.parse(raw||'[]');
+    if(page&&page.length){
+      var seen={};TXS.forEach(function(t){seen[fp(t)]=1;});
+      page.map(mig).filter(function(t){return t&&t.amount>0;}).forEach(function(t){
+        var k=fp(t);if(!seen[k]){TXS.push(t);seen[k]=1;}
+      });
+    }
+    if(page&&page.length===_TX_PAGE_SIZE&&offset+_TX_PAGE_SIZE<total){
+      /* more pages to load — yield then continue */
+      setTimeout(function(){loadTxPages(total,offset+_TX_PAGE_SIZE);},0);
+    }else{
+      /* all pages loaded */
+      setTimeout(function(){finishScan([]);},0);
+    }
+  }catch(e){finishScan([]);}
 }
 function finishScan(imported){
  try{

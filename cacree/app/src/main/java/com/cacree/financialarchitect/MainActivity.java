@@ -323,13 +323,20 @@ public class MainActivity extends Activity {
             new Thread(() -> {
                 String result;
                 try {
-                    if (!hasSmsPermission()) result = "{\"error\":\"no_permission\"}";
-                    else {
+                    if (!hasSmsPermission()) {
+                        result = "{\"error\":\"no_permission\"}";
+                    } else {
                         DatabaseHelper d = getDb();
-                        if (d == null) result = "{\"error\":\"db_null\"}";
-                        else {
-                            String r = SmsReader.readAll(MainActivity.this, d);
-                            result = r != null ? r : "[]";
+                        if (d == null) {
+                            result = "{\"error\":\"db_null\"}";
+                        } else {
+                            // Import all SMS into DB, then return just the count so JS
+                            // can load transactions in small pages — prevents sending one
+                            // huge JSON blob through evaluateJavascript which freezes the
+                            // renderer thread.
+                            SmsReader.readAll(MainActivity.this, d);
+                            int total = d.count();
+                            result = "{\"count\":" + total + "}";
                         }
                     }
                 } catch (Exception e) {
@@ -339,9 +346,6 @@ public class MainActivity extends Activity {
                 final String payload = result;
                 if (wv != null) wv.post(() -> {
                     if (wv != null) {
-                        // Pass as a quoted JSON string so JS uses JSON.parse() internally.
-                        // Passing as a JS object literal forces V8 to parse a potentially
-                        // large AST on the renderer thread, freezing touch input.
                         String escaped = payload
                             .replace("\\", "\\\\")
                             .replace("'",  "\\'")
@@ -353,6 +357,14 @@ public class MainActivity extends Activity {
                     }
                 });
             }, "cacree-sms-import").start();
+        }
+
+        @JavascriptInterface
+        public String getTransactionsPage(int offset, int limit) {
+            try {
+                DatabaseHelper d = getDb();
+                return d != null ? d.getPage(offset, limit).toString() : "[]";
+            } catch (Exception e) { return "[]"; }
         }
 
         @JavascriptInterface

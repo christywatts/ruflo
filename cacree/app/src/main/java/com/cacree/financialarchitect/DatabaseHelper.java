@@ -111,6 +111,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return arr;
     }
 
+    /** Returns one page of transactions (for incremental loading after SMS import). */
+    public JSONArray getPage(int offset, int limit) {
+        JSONArray arr = new JSONArray();
+        try {
+            Cursor c = getReadableDatabase().rawQuery(
+                "SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                new String[]{String.valueOf(limit), String.valueOf(offset)});
+            while (c.moveToNext()) arr.put(fromCursor(c).toJSON());
+            c.close();
+        } catch (Exception ignored) {}
+        return arr;
+    }
+
     public int count() {
         try {
             Cursor c = getReadableDatabase().rawQuery(
