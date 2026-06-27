@@ -253,21 +253,26 @@ html.light .nav{background:rgba(244,246,249,.75);}
 
   <div id="home-data" style="display:none">
     <div class="bal-card" id="h-balcard">
-      <div class="bal-lbl">Net Cash Flow</div>
+      <div class="bal-lbl">Money In</div>
       <div class="bal-amt" id="h-net">&mdash;</div>
-      <div class="bal-foot"><span class="bal-per" id="h-period" onclick="togglePdrop()">This Month</span><span id="h-inc" style="font-weight:700">&mdash;</span></div>
+      <div class="bal-foot"><span class="bal-per" id="h-period" onclick="togglePdrop()">This Month</span><span id="h-inc" style="font-weight:700;color:var(--red)">&mdash;</span></div>
     </div>
     <div class="sec-hdr"><div class="sec-title">Spending Overview</div><div class="sec-meta" id="sp-per"></div></div>
     <div class="glass" id="donut-card" style="margin:0 14px 12px;padding:16px"></div>
     <div id="shock-wrap"></div>
     <div class="sec-hdr"><div class="sec-title">Money In vs Out</div><div class="sec-meta" id="cf-per"></div></div>
     <div class="glass" style="margin:0 14px 12px;padding:16px">
-      <div class="bars-row"><div class="bars-top"><span style="color:var(--acc)">Money In</span><span id="cf-inc" style="font-size:16px">&mdash;</span></div><div class="bar-track"><div class="bar-fill" id="cf-inc-bar" style="background:var(--acc);width:0%"></div></div></div>
-      <div class="bars-row" style="margin-bottom:0"><div class="bars-top"><span style="color:var(--red)">Money Out</span><span id="cf-exp" style="font-size:16px">&mdash;</span></div><div class="bar-track"><div class="bar-fill" id="cf-exp-bar" style="background:var(--red);width:0%"></div></div></div>
-      <div style="margin-top:14px;padding-top:13px;border-top:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px"><span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.09em">Net</span><span id="cf-net" style="font-size:21px;font-weight:800">&mdash;</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2)"><span id="cf-cnt">&mdash;</span><span>Savings rate <b id="cf-save">&mdash;</b></span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div style="background:rgba(29,185,84,.1);border-radius:12px;padding:12px">
+          <div style="font-size:9px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.09em">Money In</div>
+          <div id="cf-inc" style="font-size:17px;font-weight:800;color:var(--acc);margin-top:5px">&mdash;</div>
+        </div>
+        <div style="background:rgba(255,71,87,.1);border-radius:12px;padding:12px">
+          <div style="font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.09em">Money Out</div>
+          <div id="cf-exp" style="font-size:17px;font-weight:800;color:var(--red);margin-top:5px">&mdash;</div>
+        </div>
       </div>
+      <div style="font-size:11px;color:var(--t3)" id="cf-cnt">&mdash;</div>
     </div>
     <div id="leak-wrap"></div>
     <div id="rec-wrap"></div>
@@ -909,12 +914,11 @@ function rHome(){
   fr.style.display='none';hd.style.display='block';
   var c=compute(getTxs());
   var lbl=getPerLabel();
-  /* net cash flow */
-  var net=document.getElementById('h-net');
-  net.textContent=(c.net<0?'-':'')+fmt(Math.abs(c.net),true);
-  var bc=document.getElementById('h-balcard');if(bc)bc.classList.toggle('neg',c.net<0);
+  /* hero card: money in */
+  document.getElementById('h-net').textContent=fmt(c.income,true);
+  var bc=document.getElementById('h-balcard');if(bc)bc.classList.remove('neg');
   document.getElementById('h-period').textContent=lbl;
-  document.getElementById('h-inc').textContent=fmt(c.income,true);
+  document.getElementById('h-inc').textContent='Out: '+fmt(c.expense,true);
   /* shock card */
   var sw=document.getElementById('shock-wrap'),tc=topCat(c.byCat);
   if(tc){
@@ -936,16 +940,7 @@ function rHome(){
   document.getElementById('cf-per').textContent=lbl;
   document.getElementById('cf-inc').textContent=fmt(c.income,true);
   document.getElementById('cf-exp').textContent=fmt(c.expense,true);
-  var mx=Math.max(c.income,c.expense,1);
-  document.getElementById('cf-inc-bar').style.width=Math.round(c.income/mx*100)+'%';
-  document.getElementById('cf-exp-bar').style.width=Math.round(c.expense/mx*100)+'%';
-  var nEl=document.getElementById('cf-net');
-  nEl.textContent=(c.net<0?'-':'+')+fmt(Math.abs(c.net),true);
-  nEl.className=c.net<0?'amt-neg':'amt-pos';
   document.getElementById('cf-cnt').textContent=c.count+' transactions';
-  var sr=c.income>0?Math.round(c.net/c.income*100):0;
-  var sEl=document.getElementById('cf-save');
-  sEl.textContent=sr+'%';sEl.style.color=sr<0?'var(--red)':sr<10?'var(--amber)':'var(--acc)';
   /* donut */
   document.getElementById('sp-per').textContent=lbl;
   rDonut(c);
