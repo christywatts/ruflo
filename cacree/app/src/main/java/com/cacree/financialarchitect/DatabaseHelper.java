@@ -105,22 +105,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return arr;
     }
 
-    public JSONArray getByCurrencyJSON(String currency) {
+    public JSONArray getPageJSON(int offset, int limit) {
         JSONArray arr = new JSONArray();
-        for (Transaction t : getByCurrency(currency)) arr.put(t.toJSON());
-        return arr;
-    }
-
-    /** Returns one page of transactions (for incremental loading after SMS import). */
-    public JSONArray getPage(int offset, int limit) {
-        JSONArray arr = new JSONArray();
+        if (offset < 0) offset = 0;
+        if (limit <= 0 || limit > 500) limit = 250;
+        Cursor c = null;
         try {
-            Cursor c = getReadableDatabase().rawQuery(
+            c = getReadableDatabase().rawQuery(
                 "SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?",
                 new String[]{String.valueOf(limit), String.valueOf(offset)});
             while (c.moveToNext()) arr.put(fromCursor(c).toJSON());
-            c.close();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return arr;
+    }
+
+    public JSONArray getByCurrencyJSON(String currency) {
+        JSONArray arr = new JSONArray();
+        for (Transaction t : getByCurrency(currency)) arr.put(t.toJSON());
         return arr;
     }
 

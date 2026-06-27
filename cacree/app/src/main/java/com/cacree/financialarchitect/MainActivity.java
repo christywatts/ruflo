@@ -4,7 +4,6 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -37,19 +36,21 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Edge-to-edge: glass UI extends under status bar
+        // ── EDGE-TO-EDGE: glass UI extends under status bar ──────
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
         } else {
+            //noinspection deprecation
             getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
                 View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
                 View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         }
-        getWindow().setStatusBarColor(Color.TRANSPARENT);
-        getWindow().setNavigationBarColor(Color.TRANSPARENT);
-
-        // Dark status/nav bar icons (white icons on dark glass bg)
+        if (Build.VERSION.SDK_INT >= 21) {
+            getWindow().setStatusBarColor(Color.TRANSPARENT);
+            getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        }
+        // Ensure dark status bar icons are NOT shown (app has dark background)
         if (Build.VERSION.SDK_INT >= 30) {
             android.view.WindowInsetsController ctrl = getWindow().getInsetsController();
             if (ctrl != null) {
@@ -58,7 +59,6 @@ public class MainActivity extends Activity {
                     android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
             }
         }
-
         // Display cutout (notch) — API 28+
         if (Build.VERSION.SDK_INT >= 28) {
             getWindow().getAttributes().layoutInDisplayCutoutMode =
@@ -82,7 +82,6 @@ public class MainActivity extends Activity {
         ws.setBuiltInZoomControls(false);
         ws.setDisplayZoomControls(false);
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        // Required for file:// sub-resources (CSS, JS from assets)
         ws.setAllowFileAccessFromFileURLs(true);
         ws.setAllowUniversalAccessFromFileURLs(true);
         if (Build.VERSION.SDK_INT >= 17) ws.setMediaPlaybackRequiresUserGesture(false);
@@ -104,9 +103,8 @@ public class MainActivity extends Activity {
             }
         });
 
-        // ── CHROME CLIENT (file chooser, dialogs, console) ────────
+        // ── CHROME CLIENT ─────────────────────────────────────────
         wv.setWebChromeClient(new WebChromeClient() {
-
             @Override
             public boolean onShowFileChooser(WebView view,
                     ValueCallback<Uri[]> fileCb, FileChooserParams params) {
@@ -161,12 +159,11 @@ public class MainActivity extends Activity {
 
         // ── JS BRIDGE ─────────────────────────────────────────────
         wv.addJavascriptInterface(new JSBridge(), "Android");
-        wv.addJavascriptInterface(new JSBridge(), "AndroidBridge"); // compat alias
+        wv.addJavascriptInterface(new JSBridge(), "AndroidBridge");
 
         wv.loadUrl("file:///android_asset/index.html");
         Log.d(TAG, "loadUrl → index.html");
 
-        // Init DB after short delay
         wv.postDelayed(() -> {
             try {
                 prefs = getSharedPreferences("cacree", MODE_PRIVATE);
@@ -175,17 +172,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) { Log.e(TAG, "DB init: " + e.getMessage()); }
         }, 400);
 
-        // Request SMS permission after UI settles
         wv.postDelayed(this::requestPerms, 3000);
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (wv != null && wv.canGoBack()) {
-            wv.goBack();
-        } else {
-            super.onBackPressed();
-        }
     }
 
     private void injectSafeAreaVars() {
@@ -202,9 +189,11 @@ public class MainActivity extends Activity {
     private void requestPerms() {
         try {
             List<String> need = new ArrayList<>();
-            if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED)
+            if (checkSelfPermission(Manifest.permission.READ_SMS)
+                    != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.READ_SMS);
-            if (checkSelfPermission(Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED)
+            if (checkSelfPermission(Manifest.permission.RECEIVE_SMS)
+                    != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.RECEIVE_SMS);
             if (Build.VERSION.SDK_INT >= 33 &&
                     checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
@@ -244,6 +233,12 @@ public class MainActivity extends Activity {
             wv.evaluateJavascript(
                 ok ? "if(window.onSmsGranted)window.onSmsGranted();"
                    : "if(window.onSmsDenied)window.onSmsDenied();", null));
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (wv != null && wv.canGoBack()) wv.goBack();
+        else super.onBackPressed();
     }
 
     @Override
@@ -309,15 +304,29 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void exportCsv(final String filename, final String content) {
-            // Fall back to plain text share — avoids FileProvider dependency
             try {
-                String text = content != null ? content : "";
-                shareText(text);
+                String fname = (filename == null || filename.isEmpty()) ? "cacree_statement.csv" : filename;
+                java.io.File dir = new java.io.File(getCacheDir(), "exports");
+                if (!dir.exists()) dir.mkdirs();
+                java.io.File f = new java.io.File(dir, fname);
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
+                fos.write((content != null ? content : "").getBytes("UTF-8"));
+                fos.close();
+                // Share via text fallback since FileProvider requires support library
+                shareText(content);
             } catch (Exception e) {
                 Log.e(TAG, "exportCsv: " + e);
+                shareText(content);
             }
         }
 
+        /**
+         * Async SMS import: all SMS are parsed and saved to DB on a background
+         * thread. The JS side is signalled with {ok:true,count:N} so it can
+         * then load transactions from the DB in small pages via getTransactionsPage().
+         * This avoids sending a large JSON blob through evaluateJavascript which
+         * blocks the renderer thread and freezes touch input.
+         */
         @JavascriptInterface
         public void importSmsAsync() {
             new Thread(() -> {
@@ -330,13 +339,9 @@ public class MainActivity extends Activity {
                         if (d == null) {
                             result = "{\"error\":\"db_null\"}";
                         } else {
-                            // Import all SMS into DB, then return just the count so JS
-                            // can load transactions in small pages — prevents sending one
-                            // huge JSON blob through evaluateJavascript which freezes the
-                            // renderer thread.
                             SmsReader.readAll(MainActivity.this, d);
                             int total = d.count();
-                            result = "{\"count\":" + total + "}";
+                            result = "{\"ok\":true,\"count\":" + total + "}";
                         }
                     }
                 } catch (Exception e) {
@@ -345,26 +350,11 @@ public class MainActivity extends Activity {
                 }
                 final String payload = result;
                 if (wv != null) wv.post(() -> {
-                    if (wv != null) {
-                        String escaped = payload
-                            .replace("\\", "\\\\")
-                            .replace("'",  "\\'")
-                            .replace("\r", "")
-                            .replace("\n", "");
-                        wv.evaluateJavascript(
-                            "if(window.onSmsImported)window.onSmsImported('" +
-                            escaped + "');", null);
-                    }
+                    if (wv != null) wv.evaluateJavascript(
+                        "if(window.onSmsImported)window.onSmsImported(" +
+                        payload + ");", null);
                 });
             }, "cacree-sms-import").start();
-        }
-
-        @JavascriptInterface
-        public String getTransactionsPage(int offset, int limit) {
-            try {
-                DatabaseHelper d = getDb();
-                return d != null ? d.getPage(offset, limit).toString() : "[]";
-            } catch (Exception e) { return "[]"; }
         }
 
         @JavascriptInterface
@@ -372,6 +362,14 @@ public class MainActivity extends Activity {
             try {
                 DatabaseHelper d = getDb();
                 return d != null ? d.getAllJSON().toString() : "[]";
+            } catch (Exception e) { return "[]"; }
+        }
+
+        @JavascriptInterface
+        public String getTransactionsPage(int offset, int limit) {
+            try {
+                DatabaseHelper d = getDb();
+                return d != null ? d.getPageJSON(offset, limit).toString() : "[]";
             } catch (Exception e) { return "[]"; }
         }
 
@@ -482,7 +480,7 @@ public class MainActivity extends Activity {
                         getSystemService(NOTIFICATION_SERVICE);
                 if (nm == null) return;
                 String chId = "cacree_alerts";
-                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                if (Build.VERSION.SDK_INT >= 26) {
                     android.app.NotificationChannel ch = new android.app.NotificationChannel(
                             chId, "CACREE Alerts", android.app.NotificationManager.IMPORTANCE_HIGH);
                     ch.setDescription("Budget and spending alerts");
@@ -490,12 +488,12 @@ public class MainActivity extends Activity {
                 }
                 android.content.Intent open = new android.content.Intent(MainActivity.this, MainActivity.class);
                 open.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                int piFlags = android.os.Build.VERSION.SDK_INT >= 23
+                int piFlags = Build.VERSION.SDK_INT >= 23
                         ? android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE
                         : android.app.PendingIntent.FLAG_UPDATE_CURRENT;
                 android.app.PendingIntent pi = android.app.PendingIntent.getActivity(
                         MainActivity.this, 7000, open, piFlags);
-                android.app.Notification.Builder b = (android.os.Build.VERSION.SDK_INT >= 26)
+                android.app.Notification.Builder b = (Build.VERSION.SDK_INT >= 26)
                         ? new android.app.Notification.Builder(MainActivity.this, chId)
                         : new android.app.Notification.Builder(MainActivity.this);
                 b.setSmallIcon(R.drawable.ic_stat_cacree)

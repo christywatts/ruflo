@@ -600,6 +600,35 @@ function dedupeTxs(arr){
   for(var i=0;i<arr.length;i++){var t=arr[i];if(!t)continue;var k=fp(t);if(seen[k])continue;seen[k]=1;out.push(t);}
   return out;
 }
+/* merge a batch of raw DB rows into TXS; returns count added */
+function mergeTxs(items){
+  if(!items||!items.length)return 0;
+  var seen={},added=0;
+  TXS.forEach(function(t){seen[fp(t)]=1;});
+  items.forEach(function(t){
+    t=mig(t);
+    if(t&&t.amount>0){var k=fp(t);if(!seen[k]){TXS.push(t);seen[k]=1;added++;}}
+  });
+  if(added)TXS=dedupeTxs(TXS);
+  return added;
+}
+/* load native DB in 250-row pages; yields to event loop between pages */
+function loadNativeTransactionsPaged(done){
+  var B=getB(),offset=0,page=250,total=0;
+  if(!(B&&B.getTransactionsPage)){if(done)done(0);return;}
+  function next(){
+    var rows=[];
+    try{rows=JSON.parse(B.getTransactionsPage(offset,page)||'[]')||[];}catch(e){rows=[];}
+    total+=mergeTxs(rows);
+    offset+=rows.length;
+    if(rows.length===page)setTimeout(next,0);
+    else{
+      if(total){persist();syncCur();smartPeriod();}
+      if(done)done(total);
+    }
+  }
+  next();
+}
 function loadState(){
   try{TXS=JSON.parse(localStorage.getItem('cacree_tx')||'[]')||[];}catch(e){TXS=[];}
   try{BUDGETS=JSON.parse(localStorage.getItem('cacree_bud')||'[]')||[];}catch(e){BUDGETS=[];}
@@ -1783,20 +1812,19 @@ function runImportScan(){
     /* background-thread scan: UI stays responsive, result arrives via callback */
     window.onSmsImported=function(raw){
       if(_impWatch){clearTimeout(_impWatch);_impWatch=null;}
+      var imported=[];
       try{
         var parsed=typeof raw==='string'?JSON.parse(raw):raw;
         if(typeof parsed==='string')parsed=JSON.parse(parsed);
         if(parsed&&parsed.error){toast('Import error: '+parsed.error);finishScan([]);return;}
-        /* New path: native side returns {count:N} — load from DB in pages so we
-           never pass a huge JSON blob through evaluateJavascript at once. */
-        if(parsed&&typeof parsed.count==='number'&&B.getTransactionsPage){
-          loadTxPages(parsed.count,0);return;
+        /* Native side returns {ok:true} — load from DB in pages (never sends huge JSON) */
+        if(parsed&&(parsed.ok||typeof parsed.count==='number')){
+          loadNativeTransactionsPaged(function(){finishScan([]);});return;
         }
-        /* Legacy path: native side returned the array directly */
-        var imported=[];
+        /* Legacy: native returned the array directly */
         if(Array.isArray(parsed)&&parsed.length)imported=parsed.map(mig).filter(function(t){return t&&t.amount>0;});
-        setTimeout(function(){finishScan(imported);},0);
-      }catch(e){toast('Parse error — trying sync fallback');finishScan([]);}
+      }catch(e){toast('Parse error — trying sync fallback');}
+      setTimeout(function(){finishScan(imported);},0);
     };
     try{B.importSmsAsync();return;}catch(e){}
   }
@@ -1812,30 +1840,6 @@ function runImportScan(){
     if(_impWatch){clearTimeout(_impWatch);_impWatch=null;}
     finishScan(imported);
   },80);
-}
-var _TX_PAGE_SIZE=200;
-function loadTxPages(total,offset){
-  /* Load transactions from the native DB in small pages, yielding to the event
-     loop between each page so taps remain responsive during large imports. */
-  var B=getB();
-  if(!B||!B.getTransactionsPage){finishScan([]);return;}
-  try{
-    var raw=B.getTransactionsPage(offset,_TX_PAGE_SIZE);
-    var page=JSON.parse(raw||'[]');
-    if(page&&page.length){
-      var seen={};TXS.forEach(function(t){seen[fp(t)]=1;});
-      page.map(mig).filter(function(t){return t&&t.amount>0;}).forEach(function(t){
-        var k=fp(t);if(!seen[k]){TXS.push(t);seen[k]=1;}
-      });
-    }
-    if(page&&page.length===_TX_PAGE_SIZE&&offset+_TX_PAGE_SIZE<total){
-      /* more pages to load — yield then continue */
-      setTimeout(function(){loadTxPages(total,offset+_TX_PAGE_SIZE);},0);
-    }else{
-      /* all pages loaded */
-      setTimeout(function(){finishScan([]);},0);
-    }
-  }catch(e){finishScan([]);}
 }
 function finishScan(imported){
  try{
@@ -1898,17 +1902,14 @@ function boot(){
      of large DBs must never block boot */
   setTimeout(function(){
     var B=getB();
-    if(B&&B.getTransactions){
+    /* paged load keeps UI responsive for large databases */
+    if(B&&B.getTransactionsPage){
+      try{loadNativeTransactionsPaged(function(){});}catch(e){}
+    }else if(B&&B.getTransactions){
       try{
         var raw=B.getTransactions();
         var stored=JSON.parse(raw||'[]');
-        if(stored&&stored.length){
-          var seen={};TXS.forEach(function(t){seen[fp(t)]=1;});
-          var added=0;
-          stored.forEach(function(t){t=mig(t);if(t&&t.amount>0){var k=fp(t);if(!seen[k]){TXS.push(t);seen[k]=1;added++;}}});
-          TXS=dedupeTxs(TXS);
-          if(added){persist();syncCur();smartPeriod();}
-        }
+        if(stored&&stored.length&&mergeTxs(stored)){persist();syncCur();smartPeriod();}
       }catch(e){}
     }
     if(B&&B.getUserProfile){
