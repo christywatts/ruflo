@@ -1,14 +1,13 @@
 # Keep JavaScript bridge methods — called by name from WebView JS
--keepclassmembers class com.cacree.app.MainActivity$JSBridge {
+-keepclassmembers class com.cacree.financialarchitect.MainActivity$JSBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Keep all public JS-bridge classes
--keep class com.cacree.app.** { *; }
-
-# AndroidX / AppCompat
--keep class androidx.** { *; }
--dontwarn androidx.**
+# Keep all app classes (correct package name)
+-keep class com.cacree.financialarchitect.** { *; }
 
 # JSON
 -keep class org.json.** { *; }
+
+# Suppress warnings for missing classes
+-dontwarn androidx.**

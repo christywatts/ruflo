@@ -13,6 +13,8 @@ import android.util.Log;
 import android.webkit.WebView;
 
 import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
 
 public class SmsReceiver extends BroadcastReceiver {
 
@@ -98,7 +100,7 @@ public class SmsReceiver extends BroadcastReceiver {
                 "merchant:'" + merchant + "'," +
                 "category:'" + category + "'," +
                 "source:'" + source + "'," +
-                "date:'" + new java.util.Date(t.timestamp).toInstant().toString().substring(0, 10) + "'," +
+                "date:'" + new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new java.util.Date(t.timestamp)) + "'," +
                 "timestamp:" + t.timestamp +
             "});" +
         "}";

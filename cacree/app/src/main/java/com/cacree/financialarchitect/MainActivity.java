@@ -37,8 +37,10 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         // ── EDGE-TO-EDGE: glass UI extends under status bar ──────
+        // API 28/30 calls are in separate methods to prevent ART class-verification
+        // failures from crashing onCreate on older devices.
         if (Build.VERSION.SDK_INT >= 30) {
-            getWindow().setDecorFitsSystemWindows(false);
+            setupEdgeToEdge30();
         } else {
             //noinspection deprecation
             getWindow().getDecorView().setSystemUiVisibility(
@@ -46,23 +48,10 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
                 View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         }
-        if (Build.VERSION.SDK_INT >= 21) {
-            getWindow().setStatusBarColor(Color.TRANSPARENT);
-            getWindow().setNavigationBarColor(Color.TRANSPARENT);
-        }
-        // Ensure dark status bar icons are NOT shown (app has dark background)
-        if (Build.VERSION.SDK_INT >= 30) {
-            android.view.WindowInsetsController ctrl = getWindow().getInsetsController();
-            if (ctrl != null) {
-                ctrl.setSystemBarsAppearance(0,
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
-            }
-        }
-        // Display cutout (notch) — API 28+
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
         if (Build.VERSION.SDK_INT >= 28) {
-            getWindow().getAttributes().layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            setupCutout28();
         }
         // Keep screen on
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -100,6 +89,19 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 Log.d(TAG, "Loaded: " + url);
                 injectSafeAreaVars();
+            }
+            // Prevent the default behavior (crashing the process) when the
+            // WebView renderer dies. Return true = we handled it.
+            @Override
+            public boolean onRenderProcessGone(WebView view,
+                    android.webkit.RenderProcessGoneDetail detail) {
+                Log.e(TAG, "WebView renderer gone, reloading");
+                try {
+                    if (wv != null) {
+                        wv.reload();
+                    }
+                } catch (Exception e) { Log.e(TAG, "reload failed: " + e); }
+                return true;
             }
         });
 
@@ -175,15 +177,39 @@ public class MainActivity extends Activity {
         wv.postDelayed(this::requestPerms, 3000);
     }
 
+    // Called from the API 30 branch in onCreate — in a separate method so ART
+    // can still verify and compile onCreate on API 24-29 devices.
+    private void setupEdgeToEdge30() {
+        getWindow().setDecorFitsSystemWindows(false);
+        android.view.WindowInsetsController ctrl = getWindow().getInsetsController();
+        if (ctrl != null) {
+            ctrl.setSystemBarsAppearance(0,
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+        }
+    }
+
+    // Called from the API 28 branch in onCreate — same ART-safety rationale.
+    private void setupCutout28() {
+        getWindow().getAttributes().layoutInDisplayCutoutMode =
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+    }
+
     private void injectSafeAreaVars() {
-        int statusBarPx = 0;
-        int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        if (resId > 0) statusBarPx = getResources().getDimensionPixelSize(resId);
-        float density = getResources().getDisplayMetrics().density;
-        int statusBarDp = Math.round(statusBarPx / density);
-        final String cssValue = statusBarDp + "px";
-        wv.post(() -> wv.evaluateJavascript(
-            "document.documentElement.style.setProperty('--safe-top','" + cssValue + "');", null));
+        try {
+            int statusBarPx = 0;
+            int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (resId > 0) statusBarPx = getResources().getDimensionPixelSize(resId);
+            float density = getResources().getDisplayMetrics().density;
+            int statusBarDp = Math.round(statusBarPx / density);
+            final String cssValue = statusBarDp + "px";
+            final WebView v = wv;
+            if (v != null) v.post(() -> {
+                if (wv != null) wv.evaluateJavascript(
+                    "document.documentElement.style.setProperty('--safe-top','" + cssValue + "');",
+                    null);
+            });
+        } catch (Exception e) { Log.e(TAG, "injectSafeArea: " + e); }
     }
 
     private void requestPerms() {
