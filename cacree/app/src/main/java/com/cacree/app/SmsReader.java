@@ -1,4 +1,4 @@
-package com.cacree.financialarchitect;
+package com.cacree.app;
 
 import android.content.Context;
 import android.database.Cursor;

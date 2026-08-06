@@ -1,4 +1,4 @@
-package com.cacree.financialarchitect;
+package com.cacree.app;
 
 public class CategoryEngine {
 
@@ -13,32 +13,6 @@ public class CategoryEngine {
             if (lower.contains("refund") || lower.contains("reimbursement")) return "Refund";
             return "Income";
         }
-
-        // ── SMART EAST AFRICA MERCHANT INTENT ─────────────────────
-        // These appear as "sent to" in wallet SMS, but they are not peer transfers.
-        if (lower.contains("vodacom-bundles") || lower.contains("vodacom bundles") ||
-            lower.contains("safaricom-bundles") || lower.contains("safaricom bundles") ||
-            lower.contains("airtel-bundles") || lower.contains("airtel bundles") ||
-            lower.contains("halotel-bundles") || lower.contains("halotel bundles") ||
-            lower.contains("data bundles") || lower.contains("internet bundles"))
-            return "Data Bundle";
-
-        if (lower.contains("tips-airtelmoney") || lower.contains("tips airtelmoney") ||
-            lower.contains("tips-selcom") || lower.contains("tips selcom") ||
-            lower.contains("tips-halotel") || lower.contains("tips halotel") ||
-            lower.contains("tips-mixx") || lower.contains("tips mixx") ||
-            lower.contains("safaricom m-pesa tt") || lower.contains("safaricom mpesa tt") ||
-            lower.contains("m-pesa tt") || lower.contains("mpesa tt"))
-            return "Transport";
-
-        if (lower.contains("luku") || lower.contains("tanesco") || lower.contains("kplc") ||
-            lower.contains("umeme") || lower.contains("token"))
-            return "Bills";
-
-        if (lower.contains("bank debit") || lower.contains("cash withdrawal") ||
-            lower.contains("bank withdrawal") || lower.contains("withdrawal -") ||
-            lower.contains("umetoa") || lower.contains("imetolewa"))
-            return "Withdrawal";
 
         // ── AIRTIME (separate from Telecom) ───────────────────────
         if (lower.contains("airtime") || lower.contains("top-up") || lower.contains("topup") ||

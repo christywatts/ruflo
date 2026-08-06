@@ -1,4 +1,4 @@
-package com.cacree.financialarchitect;
+package com.cacree.app;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -13,8 +13,6 @@ import android.util.Log;
 import android.webkit.WebView;
 
 import java.lang.ref.WeakReference;
-import java.text.SimpleDateFormat;
-import java.util.Locale;
 
 public class SmsReceiver extends BroadcastReceiver {
 
@@ -100,7 +98,7 @@ public class SmsReceiver extends BroadcastReceiver {
                 "merchant:'" + merchant + "'," +
                 "category:'" + category + "'," +
                 "source:'" + source + "'," +
-                "date:'" + new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new java.util.Date(t.timestamp)) + "'," +
+                "date:'" + new java.util.Date(t.timestamp).toInstant().toString().substring(0, 10) + "'," +
                 "timestamp:" + t.timestamp +
             "});" +
         "}";
@@ -187,9 +185,16 @@ public class SmsReceiver extends BroadcastReceiver {
 
     private static String escJson(String s) {
         if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("'", "\\'")
-                .replace("\n", " ")
-                .replace("\r", "");
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\') sb.append("\\\\");
+            else if (c == '\'') sb.append("\\'");
+            else if (c == '"') sb.append("\\\"");
+            else if (c == '\u2028' || c == '\u2029') sb.append(' ');  // JS line separators break string literals
+            else if (c < 0x20) sb.append(' ');                        // all control chars incl \n \r \t
+            else sb.append(c);
+        }
+        return sb.toString();
     }
 }

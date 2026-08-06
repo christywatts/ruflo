@@ -1,9 +1,9 @@
-package com.cacree.financialarchitect;
+package com.cacree.app;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -17,10 +17,16 @@ import android.view.WindowManager;
 import android.webkit.*;
 import android.widget.EditText;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import java.util.*;
 import org.json.*;
 
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
 
     private WebView wv;
     private DatabaseHelper db;
@@ -37,21 +43,20 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         // ── EDGE-TO-EDGE: glass UI extends under status bar ──────
-        // API 28/30 calls are in separate methods to prevent ART class-verification
-        // failures from crashing onCreate on older devices.
-        if (Build.VERSION.SDK_INT >= 30) {
-            setupEdgeToEdge30();
-        } else {
-            //noinspection deprecation
-            getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        if (Build.VERSION.SDK_INT >= 21) {
+            getWindow().setStatusBarColor(Color.TRANSPARENT);
+            getWindow().setNavigationBarColor(Color.TRANSPARENT);
         }
-        getWindow().setStatusBarColor(Color.TRANSPARENT);
-        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        // White icons on dark glass bg
+        WindowInsetsControllerCompat ctrl =
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        ctrl.setAppearanceLightStatusBars(false);
+        ctrl.setAppearanceLightNavigationBars(false);
+        // Display cutout (notch) — API 28+
         if (Build.VERSION.SDK_INT >= 28) {
-            setupCutout28();
+            getWindow().getAttributes().layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
         // Keep screen on
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -70,9 +75,12 @@ public class MainActivity extends Activity {
         ws.setLoadWithOverviewMode(true);
         ws.setBuiltInZoomControls(false);
         ws.setDisplayZoomControls(false);
-        ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        ws.setAllowFileAccessFromFileURLs(true);
-        ws.setAllowUniversalAccessFromFileURLs(true);
+        ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        // SECURITY: app is a single self-contained asset file. Cross-origin
+        // and file-URL XHR are not needed — leaving them on would let any
+        // XSS read local files and exfiltrate them.
+        ws.setAllowFileAccessFromFileURLs(false);
+        ws.setAllowUniversalAccessFromFileURLs(false);
         if (Build.VERSION.SDK_INT >= 17) ws.setMediaPlaybackRequiresUserGesture(false);
 
         wv.setScrollBarStyle(WebView.SCROLLBARS_OUTSIDE_OVERLAY);
@@ -82,31 +90,36 @@ public class MainActivity extends Activity {
         // ── WEB VIEW CLIENT ───────────────────────────────────────
         wv.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView v, String url) {
+                // SECURITY: only local app assets may load inside this WebView.
+                // The JS bridge (SMS access, data wipe) is attached here — any
+                // remote page loaded in-WebView would inherit it. External
+                // links (wa.me share etc) go to the system browser instead.
+                if (url == null) return true;
+                String u = url.toLowerCase();
+                if (u.startsWith("file:///android_asset/")) return false;
+                try {
+                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                } catch (Exception e) { Log.e(TAG, "external url: " + e); }
+                return true;
+            }
+            @Override
             public void onReceivedError(WebView v, int code, String desc, String url) {
                 Log.e(TAG, "WebView error " + code + ": " + desc + " [" + url + "]");
             }
             @Override
             public void onPageFinished(WebView view, String url) {
                 Log.d(TAG, "Loaded: " + url);
+                // Inject safe-area CSS via JS after page loads
                 injectSafeAreaVars();
-            }
-            // Prevent the default behavior (crashing the process) when the
-            // WebView renderer dies. Return true = we handled it.
-            @Override
-            public boolean onRenderProcessGone(WebView view,
-                    android.webkit.RenderProcessGoneDetail detail) {
-                Log.e(TAG, "WebView renderer gone, reloading");
-                try {
-                    if (wv != null) {
-                        wv.reload();
-                    }
-                } catch (Exception e) { Log.e(TAG, "reload failed: " + e); }
-                return true;
             }
         });
 
-        // ── CHROME CLIENT ─────────────────────────────────────────
+        // ── CHROME CLIENT (file chooser, dialogs, console) ────────
         wv.setWebChromeClient(new WebChromeClient() {
+
             @Override
             public boolean onShowFileChooser(WebView view,
                     ValueCallback<Uri[]> fileCb, FileChooserParams params) {
@@ -161,11 +174,12 @@ public class MainActivity extends Activity {
 
         // ── JS BRIDGE ─────────────────────────────────────────────
         wv.addJavascriptInterface(new JSBridge(), "Android");
-        wv.addJavascriptInterface(new JSBridge(), "AndroidBridge");
+        wv.addJavascriptInterface(new JSBridge(), "AndroidBridge"); // compat alias
 
         wv.loadUrl("file:///android_asset/index.html");
         Log.d(TAG, "loadUrl → index.html");
 
+        // Init DB after short delay (WebView loads async)
         wv.postDelayed(() -> {
             try {
                 prefs = getSharedPreferences("cacree", MODE_PRIVATE);
@@ -174,59 +188,74 @@ public class MainActivity extends Activity {
             } catch (Exception e) { Log.e(TAG, "DB init: " + e.getMessage()); }
         }, 400);
 
-        wv.postDelayed(this::requestPerms, 3000);
+        // Request SMS permission after UI settles
+        wv.postDelayed(this::showSmsDisclosure, 1500);
     }
 
-    // Called from the API 30 branch in onCreate — in a separate method so ART
-    // can still verify and compile onCreate on API 24-29 devices.
-    private void setupEdgeToEdge30() {
-        getWindow().setDecorFitsSystemWindows(false);
-        android.view.WindowInsetsController ctrl = getWindow().getInsetsController();
-        if (ctrl != null) {
-            ctrl.setSystemBarsAppearance(0,
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
-        }
-    }
-
-    // Called from the API 28 branch in onCreate — same ART-safety rationale.
-    private void setupCutout28() {
-        getWindow().getAttributes().layoutInDisplayCutoutMode =
-            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-    }
-
+    /** Injects actual status bar height so the glass top bar clears the system bar */
     private void injectSafeAreaVars() {
+        int statusBarPx = 0;
+        int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resId > 0) statusBarPx = getResources().getDimensionPixelSize(resId);
+        float density = getResources().getDisplayMetrics().density;
+        int statusBarDp = Math.round(statusBarPx / density);
+        final String cssValue = statusBarDp + "px";
+        wv.post(() -> wv.evaluateJavascript(
+            "document.documentElement.style.setProperty('--safe-top','" + cssValue + "');", null));
+    }
+
+    /**
+     * Google Play "Prominent Disclosure and Consent" gate.
+     * Must be shown BEFORE the runtime SMS prompt, must state what is accessed,
+     * why, and where it goes, and must require an affirmative tap.
+     */
+    private void showSmsDisclosure() {
         try {
-            int statusBarPx = 0;
-            int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-            if (resId > 0) statusBarPx = getResources().getDimensionPixelSize(resId);
-            float density = getResources().getDisplayMetrics().density;
-            int statusBarDp = Math.round(statusBarPx / density);
-            final String cssValue = statusBarDp + "px";
-            final WebView v = wv;
-            if (v != null) v.post(() -> {
-                if (wv != null) wv.evaluateJavascript(
-                    "document.documentElement.style.setProperty('--safe-top','" + cssValue + "');",
-                    null);
-            });
-        } catch (Exception e) { Log.e(TAG, "injectSafeArea: " + e); }
+            if (isFinishing() || isDestroyed()) return;
+            if (prefs == null) prefs = getSharedPreferences("cacree", MODE_PRIVATE);
+
+            boolean granted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS)
+                    == PackageManager.PERMISSION_GRANTED;
+            if (granted) { requestPerms(); return; }
+
+            if (prefs.getBoolean("sms_disclosure_ack", false)) { requestPerms(); return; }
+
+            new AlertDialog.Builder(this)
+                .setTitle("How CACREE reads your money SMS")
+                .setMessage(
+                    "CACREE asks for SMS access so it can read the transaction alerts sent to you "
+                  + "by M-Pesa, Tigo Pesa, Airtel Money, NMB, CRDB, KCB and similar services.\n\n"
+                  + "It uses those messages only to build your spending breakdown, budgets and "
+                  + "recurring-payment detection inside this app.\n\n"
+                  + "\u2022 Personal, non-financial SMS are ignored.\n"
+                  + "\u2022 Your messages are processed on this device and are never uploaded, "
+                  + "shared or sold.\n"
+                  + "\u2022 You can decline and still add transactions manually.")
+                .setCancelable(false)
+                .setPositiveButton("Continue", (d, w) -> {
+                    prefs.edit().putBoolean("sms_disclosure_ack", true).apply();
+                    requestPerms();
+                })
+                .setNegativeButton("Not now", (d, w) -> d.dismiss())
+                .show();
+        } catch (Exception e) { Log.e(TAG, "showSmsDisclosure: " + e.getMessage()); }
     }
 
     private void requestPerms() {
         try {
             List<String> need = new ArrayList<>();
-            if (checkSelfPermission(Manifest.permission.READ_SMS)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS)
                     != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.READ_SMS);
-            if (checkSelfPermission(Manifest.permission.RECEIVE_SMS)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
                     != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.RECEIVE_SMS);
             if (Build.VERSION.SDK_INT >= 33 &&
-                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                             != PackageManager.PERMISSION_GRANTED)
                 need.add(Manifest.permission.POST_NOTIFICATIONS);
             if (!need.isEmpty())
-                requestPermissions(need.toArray(new String[0]), SMS_CODE);
+                ActivityCompat.requestPermissions(this, need.toArray(new String[0]), SMS_CODE);
         } catch (Exception e) { Log.e(TAG, "requestPerms: " + e.getMessage()); }
     }
 
@@ -251,7 +280,8 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+    public void onRequestPermissionsResult(int code,
+            @NonNull String[] perms, @NonNull int[] res) {
         super.onRequestPermissionsResult(code, perms, res);
         final boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
         Log.d(TAG, "Permission result: " + ok + " code=" + code);
@@ -271,14 +301,14 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (wv != null) wv.onResume();
-        SmsReceiver.setWebView(wv);
+        SmsReceiver.setWebView(wv);   // register live WebView for real-time push
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         if (wv != null) wv.onPause();
-        SmsReceiver.setWebView(null);
+        SmsReceiver.setWebView(null); // unregister — app backgrounded
     }
 
     @Override
@@ -302,6 +332,7 @@ public class MainActivity extends Activity {
             return prefs;
         }
 
+        /** Import all SMS, parse, dedup, return JSON array */
         @JavascriptInterface
         public String importSms() {
             try {
@@ -316,6 +347,7 @@ public class MainActivity extends Activity {
             }
         }
 
+        /** Open the native Android share sheet (all apps, not just WhatsApp) */
         @JavascriptInterface
         public void shareText(String text) {
             try {
@@ -328,6 +360,36 @@ public class MainActivity extends Activity {
             } catch (Exception e) { Log.e(TAG, "shareText: " + e); }
         }
 
+        /** Share a PNG (base64) through the system sheet — works for WhatsApp
+         *  status, Instagram Stories, TikTok, and anything else that accepts
+         *  an image. Story apps only appear for image intents, never text. */
+        @JavascriptInterface
+        public void shareImage(final String base64Png, final String caption) {
+            try {
+                byte[] bytes = android.util.Base64.decode(base64Png, android.util.Base64.DEFAULT);
+                java.io.File dir = new java.io.File(getCacheDir(), "exports");
+                if (!dir.exists()) dir.mkdirs();
+                java.io.File f = new java.io.File(dir, "cacree_recap.png");
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
+                fos.write(bytes);
+                fos.close();
+                android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                        MainActivity.this, "com.cacree.app.fileprovider", f);
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("image/png");
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                if (caption != null && !caption.isEmpty()) send.putExtra(Intent.EXTRA_TEXT, caption);
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Intent chooser = Intent.createChooser(send, "Share your recap");
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(chooser);
+            } catch (Exception e) {
+                Log.e(TAG, "shareImage: " + e);
+                shareText(caption);
+            }
+        }
+
+        /** Write a CSV file and open the share sheet with it attached. */
         @JavascriptInterface
         public void exportCsv(final String filename, final String content) {
             try {
@@ -338,36 +400,39 @@ public class MainActivity extends Activity {
                 java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
                 fos.write((content != null ? content : "").getBytes("UTF-8"));
                 fos.close();
-                // Share via text fallback since FileProvider requires support library
-                shareText(content);
+                android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                        MainActivity.this, "com.cacree.app.fileprovider", f);
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("text/csv");
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                send.putExtra(Intent.EXTRA_SUBJECT, "CACREE Statement");
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Intent chooser = Intent.createChooser(send, "Export statement");
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(chooser);
             } catch (Exception e) {
                 Log.e(TAG, "exportCsv: " + e);
-                shareText(content);
+                shareText(content);   // fallback: share as plain text
             }
         }
 
         /**
-         * Async SMS import: all SMS are parsed and saved to DB on a background
-         * thread. The JS side is signalled with {ok:true,count:N} so it can
-         * then load transactions from the DB in small pages via getTransactionsPage().
-         * This avoids sending a large JSON blob through evaluateJavascript which
-         * blocks the renderer thread and freezes touch input.
+         * Async SMS import — runs on a background thread so the WebView's JS
+         * thread (and the whole UI) stays responsive during the scan.
+         * Result is delivered via window.onSmsImported(jsonArray).
          */
         @JavascriptInterface
         public void importSmsAsync() {
             new Thread(() -> {
                 String result;
                 try {
-                    if (!hasSmsPermission()) {
-                        result = "{\"error\":\"no_permission\"}";
-                    } else {
+                    if (!hasSmsPermission()) result = "{\"error\":\"no_permission\"}";
+                    else {
                         DatabaseHelper d = getDb();
-                        if (d == null) {
-                            result = "{\"error\":\"db_null\"}";
-                        } else {
-                            SmsReader.readAll(MainActivity.this, d);
-                            int total = d.count();
-                            result = "{\"ok\":true,\"count\":" + total + "}";
+                        if (d == null) result = "{\"error\":\"db_null\"}";
+                        else {
+                            String r = SmsReader.readAll(MainActivity.this, d);
+                            result = r != null ? r : "[]";
                         }
                     }
                 } catch (Exception e) {
@@ -383,6 +448,7 @@ public class MainActivity extends Activity {
             }, "cacree-sms-import").start();
         }
 
+        /** Return all stored transactions as JSON — called on app boot */
         @JavascriptInterface
         public String getTransactions() {
             try {
@@ -391,14 +457,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) { return "[]"; }
         }
 
-        @JavascriptInterface
-        public String getTransactionsPage(int offset, int limit) {
-            try {
-                DatabaseHelper d = getDb();
-                return d != null ? d.getPageJSON(offset, limit).toString() : "[]";
-            } catch (Exception e) { return "[]"; }
-        }
-
+        /** Return transactions for a specific currency */
         @JavascriptInterface
         public String getTransactionsByCurrency(String currency) {
             try {
@@ -409,19 +468,20 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean hasSmsPermission() {
-            return checkSelfPermission(Manifest.permission.READ_SMS)
-                    == PackageManager.PERMISSION_GRANTED;
+            return ContextCompat.checkSelfPermission(MainActivity.this,
+                    Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED;
         }
 
         @JavascriptInterface
         public void requestSmsPermission() {
             try {
-                requestPermissions(
+                ActivityCompat.requestPermissions(MainActivity.this,
                     new String[]{ Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS },
                     SMS_CODE);
             } catch (Exception e) { Log.e(TAG, "reqSms: " + e); }
         }
 
+        /** Save full user profile as JSON string */
         @JavascriptInterface
         public void saveUserProfile(String email, String name, String phone) {
             try {
@@ -445,6 +505,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) { return "{}"; }
         }
 
+        /** Set Pro status (wire to real billing in production) */
         @JavascriptInterface
         public void setPro(boolean active) {
             getPrefs().edit().putBoolean("pro", active).apply();
@@ -455,6 +516,7 @@ public class MainActivity extends Activity {
             return getPrefs().getBoolean("pro", false);
         }
 
+        /** Save base currency preference */
         @JavascriptInterface
         public void setBaseCurrency(String code) {
             getPrefs().edit().putString("base_currency", code != null ? code : "USD").apply();
@@ -465,6 +527,7 @@ public class MainActivity extends Activity {
             return getPrefs().getString("base_currency", "USD");
         }
 
+        /** Clear all transaction data */
         @JavascriptInterface
         public void clearAll() {
             try {
@@ -481,6 +544,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) { return 0; }
         }
 
+        /** Run intelligence engine and return JSON insights */
         @JavascriptInterface
         public String getInsights() {
             try {
@@ -494,11 +558,13 @@ public class MainActivity extends Activity {
             } catch (Exception e) { return "[]"; }
         }
 
+        /** Show a native toast (for critical errors where JS toast may not be visible) */
         @JavascriptInterface
         public void nativeToast(final String msg) {
             runOnUiThread(() -> Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show());
         }
 
+        /** Post a system notification (used by budget alerts). */
         @JavascriptInterface
         public void notify(final String title, final String body) {
             try {
@@ -506,7 +572,7 @@ public class MainActivity extends Activity {
                         getSystemService(NOTIFICATION_SERVICE);
                 if (nm == null) return;
                 String chId = "cacree_alerts";
-                if (Build.VERSION.SDK_INT >= 26) {
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
                     android.app.NotificationChannel ch = new android.app.NotificationChannel(
                             chId, "CACREE Alerts", android.app.NotificationManager.IMPORTANCE_HIGH);
                     ch.setDescription("Budget and spending alerts");
@@ -514,12 +580,12 @@ public class MainActivity extends Activity {
                 }
                 android.content.Intent open = new android.content.Intent(MainActivity.this, MainActivity.class);
                 open.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                int piFlags = Build.VERSION.SDK_INT >= 23
+                int piFlags = android.os.Build.VERSION.SDK_INT >= 23
                         ? android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE
                         : android.app.PendingIntent.FLAG_UPDATE_CURRENT;
                 android.app.PendingIntent pi = android.app.PendingIntent.getActivity(
                         MainActivity.this, 7000, open, piFlags);
-                android.app.Notification.Builder b = (Build.VERSION.SDK_INT >= 26)
+                android.app.Notification.Builder b = (android.os.Build.VERSION.SDK_INT >= 26)
                         ? new android.app.Notification.Builder(MainActivity.this, chId)
                         : new android.app.Notification.Builder(MainActivity.this);
                 b.setSmallIcon(R.drawable.ic_stat_cacree)

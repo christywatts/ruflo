@@ -1,4 +1,4 @@
-package com.cacree.financialarchitect;
+package com.cacree.app;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -102,23 +102,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public JSONArray getAllJSON() {
         JSONArray arr = new JSONArray();
         for (Transaction t : getAll()) arr.put(t.toJSON());
-        return arr;
-    }
-
-    public JSONArray getPageJSON(int offset, int limit) {
-        JSONArray arr = new JSONArray();
-        if (offset < 0) offset = 0;
-        if (limit <= 0 || limit > 500) limit = 250;
-        Cursor c = null;
-        try {
-            c = getReadableDatabase().rawQuery(
-                "SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?",
-                new String[]{String.valueOf(limit), String.valueOf(offset)});
-            while (c.moveToNext()) arr.put(fromCursor(c).toJSON());
-        } catch (Exception ignored) {
-        } finally {
-            if (c != null) c.close();
-        }
         return arr;
     }
 
